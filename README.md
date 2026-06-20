@@ -49,16 +49,26 @@ python scripts/run_detector.py
 - 첫 실행은 기존 공지를 알림 없이 `seen` 처리(과거 공지 폭탄 방지).
 - AWS EC2 운영 시 **서울 리전(ap-northeast-2)** 권장. 차단되면 `HTTP_PROXY_URL`로 국내 프록시 주입.
 
-## 과거 케이스 백필 (등급 예측 2차 검증용)
+## 과거 케이스 수집 → 백필 (등급 예측 2차 검증용)
 
+**1) 수집** (망 허용 환경 / 서울 IP 권장 — 거래소 공지는 해외 IP 차단 잦음):
 ```bash
-# data/cases_seed.example.json 은 형식 설명용 템플릿(합성값). 실데이터로 교체 후:
-python scripts/backfill_cases.py [입력.json]
+COINGECKO_ENABLED=true python scripts/collect_cases.py [출력.json]
+# 옵션: COLLECT_PAGES=20 COLLECT_WINDOW_H=48 COLLECT_SLEEP=1.5
 ```
+- 업비트 공지 아카이브를 훑어 과거 원화상장을 찾고, 코인게코로 **상장후 실현수익률**(윈도 고점, 글로벌 USD 프록시)과 **시총 스냅샷**을 모아 `cases_collected.json` 생성.
+- 해외 서버라면 `.env`의 `HTTP_PROXY_URL`로 국내 프록시 주입.
 
-- 입력 JSON 각 케이스를 **라이브와 동일한 피처 추출기**로 재구성 + 실현수익률→등급 라벨 → `cases` 저장.
+**2) 백필** (오프라인 가능):
+```bash
+python scripts/backfill_cases.py data/cases_collected.json
+```
+- 각 케이스를 **라이브와 동일한 피처 추출기**로 재구성 + 실현수익률→등급 라벨 → `cases` 저장.
 - 저장된 케이스는 다음 실행부터 등급 예측의 **2차 등급(최근접 이웃)** 에 자동 반영.
-- ⚠️ 실데이터(공지 시각·컨트랙트·상장후 가격액션·상장시점 시총/소셜 스냅샷) 수집은 망 허용 환경/국내 IP 필요.
+- `data/cases_seed.example.json` 은 형식 설명용 템플릿(합성값).
+
+> 수집기 순수 로직(수익률 계산·페이지네이션·조립)은 stdlib 단위테스트로 검증됨.
+> 거래소 엔드포인트/스키마는 라이브에서 재검증 필요(어댑터 파싱부 격리).
 
 ## 테스트
 
@@ -69,5 +79,5 @@ PYTHONPATH=src python -m unittest discover -s tests   # 의존성 없이 동작(
 ## 개발
 
 - Python 3.11 / asyncio, 핵심 로직은 표준 라이브러리, HTTP는 `requests`
-- 구조: `src/wonsang_bot/{config,core,detector,resolver,predictor,llm,notify,storage}`
+- 구조: `src/wonsang_bot/{config,core,detector,resolver,predictor,collector,llm,notify,storage}`
 - 자세한 스택·로드맵: [`docs/PLAN.md`](docs/PLAN.md)
