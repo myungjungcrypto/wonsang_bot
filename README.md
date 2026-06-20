@@ -56,8 +56,9 @@ python scripts/run_detector.py
 COINGECKO_ENABLED=true python scripts/collect_cases.py [출력.json]
 # 옵션: COLLECT_PAGES=20 COLLECT_WINDOW_H=48 COLLECT_SLEEP=1.5
 ```
-- 업비트 공지 아카이브를 훑어 과거 원화상장을 찾고, 코인게코로 **상장후 실현수익률**(윈도 고점, 글로벌 USD 프록시)과 **시총 스냅샷**을 모아 `cases_collected.json` 생성.
-- 해외 서버라면 `.env`의 `HTTP_PROXY_URL`로 국내 프록시 주입.
+- 업비트 공지 아카이브를 훑어 과거 원화상장을 찾고, **국내 KRW 캔들**로 실현수익률, (선택)코인게코로 시총 스냅샷을 모아 `cases_collected.json` 생성.
+- **라벨 방법론**: 상장 공지 **+5분 매수** → 상장 직후 **국내 고점 매도** 수익률 → 대성공 ≥25% / 성공 10~25% / 보통 0~10% / 실패 -10~0% / 큰실패 ≤-10%.
+- 해외 서버라면 `.env`의 `HTTP_PROXY_URL`로 국내 프록시 주입. (서울 EC2면 보통 그대로 동작)
 
 **2) 백필** (오프라인 가능):
 ```bash

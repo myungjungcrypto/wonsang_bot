@@ -2,6 +2,10 @@ import unittest
 
 from wonsang_bot.collector.archive import fetch_upbit_archive, page_url
 from wonsang_bot.collector.assemble import to_raw_case
+from wonsang_bot.collector.price import (
+    bithumb_candles_to_series,
+    upbit_candles_to_series,
+)
 from wonsang_bot.collector.returns import peak_return_pct
 from wonsang_bot.core.events import Announcement, Contract
 from wonsang_bot.detector.parser import parse_title
@@ -17,12 +21,40 @@ class TestReturns(unittest.TestCase):
         series = [(100, 10), (1000, 100)]  # 1000 은 윈도 밖
         self.assertAlmostEqual(peak_return_pct(series, 100, 100), 0.0)
 
+    def test_entry_offset_picks_5min_price(self):
+        # 진입 = start(0)+300초 시점(가격 20), 윈도 내 고점 30 → +50%
+        series = [(0, 10), (300, 20), (600, 30), (10_000, 99)]
+        self.assertAlmostEqual(
+            peak_return_pct(series, 0, 3600, entry_offset_sec=300), 50.0
+        )
+
     def test_entry_falls_back_to_last_before(self):
-        series = [(50, 20)]  # 상장 이후 포인트 없음 → 마지막 직전값 진입
+        series = [(50, 20)]  # 진입시각 이후 포인트 없음 → 마지막값 진입
         self.assertAlmostEqual(peak_return_pct(series, 100, 100), 0.0)
 
     def test_empty(self):
         self.assertIsNone(peak_return_pct([], 100, 100))
+
+
+class TestCandleParsers(unittest.TestCase):
+    def test_upbit(self):
+        rows = [
+            {"candle_date_time_utc": "2026-03-01T05:00:00", "trade_price": 1000.0},
+            {"candle_date_time_utc": "2026-03-01T05:01:00", "trade_price": 1100.0},
+            {"candle_date_time_utc": "bad", "trade_price": 1.0},  # 무시
+        ]
+        s = upbit_candles_to_series(rows)
+        self.assertEqual(len(s), 2)
+        self.assertEqual(s[0][1], 1000.0)
+
+    def test_bithumb(self):
+        rows = [
+            [1740805200000, "100", "110", "120", "95", "3.0"],  # close=110
+            [1740805260000, "110", "130", "135", "108", "2.0"],
+            ["bad"],  # 무시
+        ]
+        s = bithumb_candles_to_series(rows)
+        self.assertEqual([p for _, p in s], [110.0, 130.0])
 
 
 class TestPageUrl(unittest.TestCase):
