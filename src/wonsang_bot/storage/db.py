@@ -10,7 +10,7 @@ import os
 import sqlite3
 import threading
 
-from ..core.events import Announcement, ListingDetected
+from ..core.events import Announcement, GradePredicted, ListingDetected
 
 
 class Storage:
@@ -47,6 +47,25 @@ class Storage:
                     detected_at TEXT,
                     payload TEXT,
                     PRIMARY KEY (source, announcement_id)
+                );
+                CREATE TABLE IF NOT EXISTS predictions (
+                    source TEXT NOT NULL,
+                    announcement_id TEXT NOT NULL,
+                    symbols TEXT,
+                    grade TEXT,
+                    score REAL,
+                    confidence REAL,
+                    secondary_grade TEXT,
+                    predicted_at TEXT,
+                    payload TEXT,
+                    PRIMARY KEY (source, announcement_id)
+                );
+                CREATE TABLE IF NOT EXISTS cases (
+                    id TEXT PRIMARY KEY,
+                    symbol TEXT,
+                    grade TEXT,
+                    features TEXT,
+                    meta TEXT
                 );
                 """
             )
@@ -112,6 +131,61 @@ class Storage:
                     json.dumps(ev.to_dict(), ensure_ascii=False),
                 ),
             )
+
+    # --- predictions ---
+    def save_prediction(self, pred: GradePredicted) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO predictions
+                (source, announcement_id, symbols, grade, score, confidence,
+                 secondary_grade, predicted_at, payload)
+                VALUES (?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    pred.source,
+                    pred.announcement_id,
+                    json.dumps(pred.symbols, ensure_ascii=False),
+                    pred.grade,
+                    pred.score,
+                    pred.confidence,
+                    pred.secondary_grade,
+                    pred.predicted_at,
+                    json.dumps(pred.to_dict(), ensure_ascii=False),
+                ),
+            )
+
+    # --- cases (과거 케이스 DB; 백필은 별도 과제) ---
+    def add_case(self, case: dict) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO cases (id, symbol, grade, features, meta) "
+                "VALUES (?,?,?,?,?)",
+                (
+                    str(case.get("id", "")),
+                    str(case.get("symbol", "")),
+                    str(case.get("grade", "보통")),
+                    json.dumps(case.get("features", {}), ensure_ascii=False),
+                    json.dumps(case.get("meta", {}), ensure_ascii=False),
+                ),
+            )
+
+    def load_cases(self) -> list[dict]:
+        with self._lock:
+            cur = self._conn.execute("SELECT id, symbol, grade, features, meta FROM cases")
+            rows = cur.fetchall()
+        out: list[dict] = []
+        for r in rows:
+            out.append(
+                {
+                    "id": r["id"],
+                    "symbol": r["symbol"],
+                    "grade": r["grade"],
+                    "features": json.loads(r["features"] or "{}"),
+                    "meta": json.loads(r["meta"] or "{}"),
+                }
+            )
+        return out
 
     def close(self) -> None:
         with self._lock:

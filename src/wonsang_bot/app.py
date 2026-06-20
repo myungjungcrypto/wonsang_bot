@@ -6,7 +6,7 @@ import logging
 
 from .config import Config
 from .core.bus import EventBus
-from .core.events import ListingDetected
+from .core.events import GradePredicted, ListingDetected
 from .detector.service import DetectorService
 from .detector.sources.bithumb import BithumbSource
 from .detector.sources.upbit import UpbitSource
@@ -14,6 +14,9 @@ from .httpclient import HttpClient
 from .llm.client import get_llm
 from .logging_conf import setup_logging
 from .notify.telegram import TelegramNotifier
+from .predictor.features import build_extractors
+from .predictor.historical import HistoricalStore
+from .predictor.service import PredictorService
 from .resolver.contract import ContractResolver
 from .storage.db import Storage
 
@@ -37,6 +40,14 @@ def build_service(config: Config) -> DetectorService:
         config.telegram_token, config.telegram_chat_id, http, dry_run=config.telegram_dry_run
     )
     bus.subscribe(ListingDetected, notifier.on_listing)
+
+    if config.predictor_enabled:
+        historical = HistoricalStore.from_dicts(storage.load_cases())
+        PredictorService(
+            config, storage, bus, build_extractors(config), historical=historical
+        )
+        bus.subscribe(GradePredicted, notifier.on_grade)
+        log.info("등급 예측: ON (과거 케이스 %d건)", len(historical.cases))
 
     sources = []
     if config.upbit_enabled:

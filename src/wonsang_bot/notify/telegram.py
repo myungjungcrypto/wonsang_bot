@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from ..core.events import ListingDetected
+from ..core.events import GradePredicted, ListingDetected
 from ..httpclient import HttpClient
 
 log = logging.getLogger(__name__)
@@ -45,8 +45,39 @@ class TelegramNotifier:
             lines.append(ev.url)
         return "\n".join(lines)
 
+    _GRADE_EMOJI = {
+        "대성공": "🟢🟢", "성공": "🟢", "보통": "🟡", "실패": "🔴", "큰실패": "🔴🔴",
+    }
+
+    @classmethod
+    def format_grade(cls, ev: GradePredicted) -> str:
+        syms = ", ".join(ev.symbols) if ev.symbols else "(심볼 미확인)"
+        emoji = cls._GRADE_EMOJI.get(ev.grade, "")
+        lines = [
+            f"{emoji} *등급 예측: {ev.grade}*",
+            f"심볼: {syms} ({ev.source.upper()})",
+            f"점수: {ev.score:.2f} / 신뢰도: {ev.confidence:.0%}",
+        ]
+        if ev.secondary_grade:
+            lines.append(f"과거 케이스 2차등급: {ev.secondary_grade}")
+        lines.append("─ 근거 ─")
+        for f in ev.features:
+            mark = "" if f.available else " (데이터없음)"
+            lines.append(f"  • {f.name}: {f.score:.2f}{mark} — {f.detail}")
+        if ev.neighbors:
+            sims = ", ".join(f"{n['symbol']}({n['grade']})" for n in ev.neighbors[:3])
+            lines.append(f"유사 케이스: {sims}")
+        return "\n".join(lines)
+
     async def on_listing(self, ev: ListingDetected) -> None:
         text = self.format_listing(ev)
+        if self.dry_run:
+            log.info("[TELEGRAM dry-run]\n%s", text)
+            return
+        await asyncio.to_thread(self._send, text)
+
+    async def on_grade(self, ev: GradePredicted) -> None:
+        text = self.format_grade(ev)
         if self.dry_run:
             log.info("[TELEGRAM dry-run]\n%s", text)
             return

@@ -41,6 +41,25 @@ def _get_bool(key: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on", "y"}
 
 
+def _get_int(key: str, default: int) -> int:
+    try:
+        return int(os.environ.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_json(key: str, default):
+    raw = os.environ.get(key)
+    if not raw:
+        return default
+    try:
+        import json
+
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass(slots=True)
 class Config:
     # --- 감지 ---
@@ -76,6 +95,25 @@ class Config:
     coingecko_api_key: str | None = None
     coingecko_base_url: str = "https://api.coingecko.com/api/v3"
 
+    # --- 등급 예측(Phase 2) ---
+    predictor_enabled: bool = True
+    w_timing: float = 1.0
+    w_narrative: float = 1.5
+    w_supply: float = 2.0
+    w_marketcap: float = 2.5
+    w_social: float = 1.0
+    historical_k: int = 3
+    # 내러티브 heat(canonical→0..1). 비우면 narrative 모듈 기본값 사용.
+    hot_narratives: dict = field(default_factory=dict)
+    # (최소점수, 등급) 내림차순 — score 매핑. 기능 8에서 캘리브레이션.
+    grade_thresholds: tuple = (
+        (0.80, "대성공"),
+        (0.62, "성공"),
+        (0.42, "보통"),
+        (0.25, "실패"),
+        (0.0, "큰실패"),
+    )
+
     # --- 저장/로깅 ---
     db_path: str = "data/wonsang.sqlite"
     log_level: str = "INFO"
@@ -105,6 +143,14 @@ class Config:
             coingecko_enabled=_get_bool("COINGECKO_ENABLED", False),
             coingecko_api_key=_get("COINGECKO_API_KEY"),
             coingecko_base_url=_get("COINGECKO_BASE_URL", cls.coingecko_base_url),  # type: ignore[arg-type]
+            predictor_enabled=_get_bool("PREDICTOR_ENABLED", True),
+            w_timing=_get_float("W_TIMING", 1.0),
+            w_narrative=_get_float("W_NARRATIVE", 1.5),
+            w_supply=_get_float("W_SUPPLY", 2.0),
+            w_marketcap=_get_float("W_MARKETCAP", 2.5),
+            w_social=_get_float("W_SOCIAL", 1.0),
+            historical_k=_get_int("HISTORICAL_K", 3),
+            hot_narratives=_get_json("HOT_NARRATIVES", {}),
             db_path=_get("DB_PATH", "data/wonsang.sqlite"),  # type: ignore[arg-type]
             log_level=_get("LOG_LEVEL", "INFO"),  # type: ignore[arg-type]
             seed_only_first_run=_get_bool("SEED_ONLY_FIRST_RUN", True),

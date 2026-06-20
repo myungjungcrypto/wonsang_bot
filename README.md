@@ -26,7 +26,11 @@
 - ✅ **Phase 0 골격** — 설정/로깅/저장소(SQLite)/이벤트 버스/HTTP 래퍼
 - ✅ **Phase 1 감지** — 업비트·빗썸 공지 폴링 → 신규 디프 → 제목 파싱(상장여부·심볼·KRW마켓) → **컨트랙트 주소 특정** → 텔레그램 알림
   - **컨트랙트 특정**: 공지 본문에서 주소·체인 추출(EVM/Tron/Solana) + CoinGecko 교차검증·동명 티커 해소(시총순위), 본문↔코인게코 주소 일치 시 신뢰도 승격
-- ⏳ 다음: Phase 2 등급 예측 (과거 케이스 DB 백필 포함)
+- ✅ **Phase 2 등급 예측** — 상장 감지 시 자동으로 **대성공/성공/보통/실패/큰실패** 등급 + 근거 + 신뢰도 산출 → 텔레그램 추천
+  - **피처**: 시간대(timing)·내러티브(narrative)·공급병목(supply) 은 이벤트만으로 계산, 시총(marketcap)·소셜(social)은 데이터 provider 연결 시 활성(없으면 우아하게 비활성·신뢰도만 하락)
+  - **스코어링**: 가용 피처 가중합 → 등급(임계값 조정 가능), 데이터 부족은 신뢰도로 표현
+  - **2차 검증**: 과거 케이스 DB와 최근접 이웃 비교로 2차 등급 제시(케이스 백필은 선행 과제)
+- ⏳ 다음: Phase 3 구매처 산정($10k CEX 추천) — 이때 시세/온체인 provider 연결
 
 > ⚠️ 거래소 공지 **엔드포인트/응답 스키마와 제목 포맷은 라이브에서 재검증 필요**
 > (개발 환경은 아웃바운드 망 차단). 어댑터 파싱부는 픽스처로 테스트됨.
@@ -53,5 +57,5 @@ PYTHONPATH=src python -m unittest discover -s tests   # 의존성 없이 동작(
 ## 개발
 
 - Python 3.11 / asyncio, 핵심 로직은 표준 라이브러리, HTTP는 `requests`
-- 구조: `src/wonsang_bot/{config,core,detector,resolver,llm,notify,storage}`
+- 구조: `src/wonsang_bot/{config,core,detector,resolver,predictor,llm,notify,storage}`
 - 자세한 스택·로드맵: [`docs/PLAN.md`](docs/PLAN.md)
