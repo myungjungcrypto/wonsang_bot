@@ -6,34 +6,29 @@ from wonsang_bot.collector.price import (
     bithumb_candles_to_series,
     upbit_candles_to_series,
 )
-from wonsang_bot.collector.returns import peak_return_pct
+from wonsang_bot.collector.returns import point_return_pct
 from wonsang_bot.core.events import Announcement, Contract
 from wonsang_bot.detector.parser import parse_title
 
 
-class TestReturns(unittest.TestCase):
-    def test_peak_within_window(self):
-        # 상장 t=100, 진입가 10, 윈도(100~200) 고점 25 → +150%
-        series = [(90, 9), (100, 10), (150, 25), (210, 50)]
-        self.assertAlmostEqual(peak_return_pct(series, 100, 100), 150.0)
+class TestPointReturn(unittest.TestCase):
+    def test_buy_5min_sell_15min(self):
+        # 진입(+300s)=20, 매도(+900s)=24 → +20% (고점 99 는 무시)
+        series = [(0, 10), (300, 20), (600, 99), (900, 24), (1200, 30)]
+        self.assertAlmostEqual(point_return_pct(series, 0, 300, 900), 20.0)
 
-    def test_excludes_outside_window(self):
-        series = [(100, 10), (1000, 100)]  # 1000 은 윈도 밖
-        self.assertAlmostEqual(peak_return_pct(series, 100, 100), 0.0)
+    def test_not_peak(self):
+        # 중간에 급등(+200%)해도 매도시점 가격만 반영
+        series = [(300, 10), (600, 30), (900, 9)]
+        self.assertAlmostEqual(point_return_pct(series, 0, 300, 900), -10.0)
 
-    def test_entry_offset_picks_5min_price(self):
-        # 진입 = start(0)+300초 시점(가격 20), 윈도 내 고점 30 → +50%
-        series = [(0, 10), (300, 20), (600, 30), (10_000, 99)]
-        self.assertAlmostEqual(
-            peak_return_pct(series, 0, 3600, entry_offset_sec=300), 50.0
-        )
-
-    def test_entry_falls_back_to_last_before(self):
-        series = [(50, 20)]  # 진입시각 이후 포인트 없음 → 마지막값 진입
-        self.assertAlmostEqual(peak_return_pct(series, 100, 100), 0.0)
+    def test_fallback_to_nearest(self):
+        # 정확한 시점 포인트 없으면 그 이상 첫 포인트 사용
+        series = [(310, 10), (920, 13)]
+        self.assertAlmostEqual(point_return_pct(series, 0, 300, 900), 30.0)
 
     def test_empty(self):
-        self.assertIsNone(peak_return_pct([], 100, 100))
+        self.assertIsNone(point_return_pct([], 0, 300, 900))
 
 
 class TestCandleParsers(unittest.TestCase):

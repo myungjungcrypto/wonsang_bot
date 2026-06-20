@@ -16,13 +16,13 @@ from urllib.parse import quote
 from ..config import Config
 from ..httpclient import HttpClient
 from ..resolver.contract import pick_coin
-from .returns import Series, peak_return_pct
+from .returns import Series, point_return_pct
 
 log = logging.getLogger(__name__)
 
-# 진입 +5분, 청산 윈도 6시간 (collect_cases 에서 override 가능)
+# 진입 +5분, 매도 +15분(상장 직후 시점 매도, 고점 아님) — collect_cases 에서 override
 DEFAULT_ENTRY_OFFSET_SEC = 300.0
-DEFAULT_WINDOW_SEC = 6 * 3600.0
+DEFAULT_EXIT_OFFSET_SEC = 900.0
 
 
 # ---------------- 국내 캔들 파서 (순수) ----------------
@@ -62,7 +62,7 @@ class DomesticPriceProvider:
     def realized_return(
         self, symbol: str, ref_ts: float,
         entry_offset_sec: float = DEFAULT_ENTRY_OFFSET_SEC,
-        window_sec: float = DEFAULT_WINDOW_SEC,
+        exit_offset_sec: float = DEFAULT_EXIT_OFFSET_SEC,
     ) -> Optional[float]:  # pragma: no cover - network
         raise NotImplementedError
 
@@ -101,10 +101,10 @@ class UpbitKrwPriceProvider(DomesticPriceProvider):
     def realized_return(
         self, symbol: str, ref_ts: float,
         entry_offset_sec: float = DEFAULT_ENTRY_OFFSET_SEC,
-        window_sec: float = DEFAULT_WINDOW_SEC,
+        exit_offset_sec: float = DEFAULT_EXIT_OFFSET_SEC,
     ) -> Optional[float]:
-        series = self.price_series(symbol, ref_ts - 60, ref_ts + window_sec)
-        return peak_return_pct(series, ref_ts, window_sec, entry_offset_sec)
+        series = self.price_series(symbol, ref_ts - 60, ref_ts + exit_offset_sec + 60)
+        return point_return_pct(series, ref_ts, entry_offset_sec, exit_offset_sec)
 
 
 class BithumbKrwPriceProvider(DomesticPriceProvider):
@@ -124,10 +124,10 @@ class BithumbKrwPriceProvider(DomesticPriceProvider):
     def realized_return(
         self, symbol: str, ref_ts: float,
         entry_offset_sec: float = DEFAULT_ENTRY_OFFSET_SEC,
-        window_sec: float = DEFAULT_WINDOW_SEC,
+        exit_offset_sec: float = DEFAULT_EXIT_OFFSET_SEC,
     ) -> Optional[float]:
-        series = self.price_series(symbol, ref_ts - 60, ref_ts + window_sec)
-        return peak_return_pct(series, ref_ts, window_sec, entry_offset_sec)
+        series = self.price_series(symbol, ref_ts - 60, ref_ts + exit_offset_sec + 60)
+        return point_return_pct(series, ref_ts, entry_offset_sec, exit_offset_sec)
 
 
 def domestic_provider_for(

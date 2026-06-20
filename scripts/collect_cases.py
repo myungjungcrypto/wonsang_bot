@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """과거 케이스 수집 (망 허용 환경 / 서울 IP 권장).
 
-라벨 방법론: 상장 공지 +5분 가격에 매수 → 상장 직후 업비트/빗썸 국내가 고점에 매도.
+라벨 방법론: 상장 +5분 가격 매수 → 상장 +15분(직후, 고점 아님) 시점 가격 매도.
 공지 아카이브 + 국내 KRW 캔들 + (선택)코인게코 시총 → 백필 입력(cases JSON).
 
 사용:
     python scripts/collect_cases.py [출력.json]
-    # 옵션: COLLECT_PAGES=20 COLLECT_WINDOW_H=6 COLLECT_ENTRY_MIN=5 COLLECT_SLEEP=0.3
+    # 옵션: COLLECT_PAGES=40 COLLECT_ENTRY_MIN=5 COLLECT_EXIT_MIN=15 COLLECT_SLEEP=0.3
     # 시총 스냅샷도 원하면: COINGECKO_ENABLED=true
 
 그다음:
@@ -44,8 +44,8 @@ log = logging.getLogger(__name__)
 def main() -> None:
     out_path = sys.argv[1] if len(sys.argv) > 1 else "data/cases_collected.json"
     pages = int(os.environ.get("COLLECT_PAGES", "10"))
-    window_sec = float(os.environ.get("COLLECT_WINDOW_H", "6")) * 3600
     entry_offset = float(os.environ.get("COLLECT_ENTRY_MIN", "5")) * 60
+    exit_offset = float(os.environ.get("COLLECT_EXIT_MIN", "15")) * 60
     sleep_s = float(os.environ.get("COLLECT_SLEEP", "0.3"))
 
     config = Config.load()
@@ -75,14 +75,14 @@ def main() -> None:
         listing_ts = dt.timestamp()
         symbol = parsed.symbols[0]
 
-        # 국내 수익률(진입 +5분 → 윈도 고점)
+        # 국내 수익률(진입 +5분 → 매도 +15분 시점, 고점 아님)
         provider = domestic_provider_for(ann.source, http)
         ret = None
         if provider is not None:
             try:
                 ret = provider.realized_return(
                     symbol, listing_ts,
-                    entry_offset_sec=entry_offset, window_sec=window_sec,
+                    entry_offset_sec=entry_offset, exit_offset_sec=exit_offset,
                 )
                 time.sleep(sleep_s)
             except Exception:  # noqa: BLE001
@@ -124,8 +124,8 @@ def main() -> None:
             {
                 "note": (
                     f"collect_cases.py 자동수집 (pages={pages}, "
-                    f"entry=+{entry_offset/60:.0f}분, window={window_sec/3600:.0f}h). "
-                    "realized_return_pct = 진입(+5분) 대비 국내 KRW 고점 수익률."
+                    f"매수=+{entry_offset/60:.0f}분, 매도=+{exit_offset/60:.0f}분). "
+                    "realized_return_pct = 진입 대비 매도시점(고점 아님) 국내 KRW 수익률."
                 ),
                 "cases": cases,
             },
