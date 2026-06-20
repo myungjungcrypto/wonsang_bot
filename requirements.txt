@@ -1,0 +1,8 @@
+# 런타임 핵심 의존성
+requests>=2.31
+
+# 선택(있으면 좋음): 향후 단계에서 사용
+# ccxt>=4.3            # CEX 통합 (구매처 산정/정리봇)
+# web3>=6.15           # 온체인/DEX/브릿지
+# python-telegram-bot  # 텔레그램 봇 제어판(현재는 requests로 알림만)
+# anthropic            # Claude SDK (현재는 requests로 직접 호출)

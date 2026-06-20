@@ -21,7 +21,36 @@
 - 자동화는 **추천 → 반자동(원클릭) → 자동** 순으로 단계적 적용
 - CEX API 키는 **거래 전용·출금 비활성·주소 화이트리스트**
 
+## 현재 구현 상태
+
+- ✅ **Phase 0 골격** — 설정/로깅/저장소(SQLite)/이벤트 버스/HTTP 래퍼
+- ✅ **Phase 1 감지** — 업비트·빗썸 공지 폴링 → 신규 디프 → 제목 파싱(상장여부·심볼·KRW마켓) → 컨트랙트 해결(선택형) → 텔레그램 알림
+- ⏳ 다음: Phase 2 등급 예측 (과거 케이스 DB 백필 포함)
+
+> ⚠️ 거래소 공지 **엔드포인트/응답 스키마와 제목 포맷은 라이브에서 재검증 필요**
+> (개발 환경은 아웃바운드 망 차단). 어댑터 파싱부는 픽스처로 테스트됨.
+
+## 실행
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt          # requests
+cp .env.example .env                      # 값 채우기 (TELEGRAM_*, 필요시 프록시 등)
+python scripts/run_detector.py
+```
+
+- 기본은 `TELEGRAM_DRY_RUN=true`(전송 대신 로그), `LLM_ENABLED=false`.
+- 첫 실행은 기존 공지를 알림 없이 `seen` 처리(과거 공지 폭탄 방지).
+- AWS EC2 운영 시 **서울 리전(ap-northeast-2)** 권장. 차단되면 `HTTP_PROXY_URL`로 국내 프록시 주입.
+
+## 테스트
+
+```bash
+PYTHONPATH=src python -m unittest discover -s tests   # 의존성 없이 동작(stdlib)
+```
+
 ## 개발
 
-- Python 3.11 / asyncio
+- Python 3.11 / asyncio, 핵심 로직은 표준 라이브러리, HTTP는 `requests`
+- 구조: `src/wonsang_bot/{config,core,detector,resolver,llm,notify,storage}`
 - 자세한 스택·로드맵: [`docs/PLAN.md`](docs/PLAN.md)

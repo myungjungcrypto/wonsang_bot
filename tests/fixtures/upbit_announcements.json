@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "data": {
+    "total_pages": 100,
+    "notices": [
+      {
+        "id": 5001,
+        "title": "디지털 자산 추가 (무빙(MOVE)) (KRW, BTC, USDT 마켓)",
+        "category": "trade",
+        "listed_at": "2026-06-19T10:00:00+09:00"
+      },
+      {
+        "id": 5000,
+        "title": "[마켓 추가] 메타플래닛(MTP) KRW 마켓 디지털 자산 추가",
+        "category": "trade",
+        "listed_at": "2026-06-18T09:00:00+09:00"
+      },
+      {
+        "id": 4999,
+        "title": "거래지원 종료 안내 (올드코인(OLD))",
+        "category": "trade",
+        "listed_at": "2026-06-17T09:00:00+09:00"
+      },
+      {
+        "id": 4998,
+        "title": "[안내] 시스템 점검 예정 안내",
+        "category": "trade",
+        "listed_at": "2026-06-16T09:00:00+09:00"
+      }
+    ]
+  }
+}
