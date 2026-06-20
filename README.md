@@ -49,6 +49,17 @@ python scripts/run_detector.py
 - 첫 실행은 기존 공지를 알림 없이 `seen` 처리(과거 공지 폭탄 방지).
 - AWS EC2 운영 시 **서울 리전(ap-northeast-2)** 권장. 차단되면 `HTTP_PROXY_URL`로 국내 프록시 주입.
 
+### 상시 운영 (PM2 — 데몬)
+
+실시간 감지 봇은 **PM2**로 띄운다(`ecosystem.config.js` 포함):
+```bash
+python3.11 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+cp .env.example .env
+pm2 start ecosystem.config.js && pm2 save
+pm2 logs wonsang-bot
+```
+- ⚠️ `collect_cases.py`/`backfill_cases.py`는 **1회성 배치**라 PM2에 올리지 말 것(정상 종료를 죽음으로 보고 무한 재시작). 그건 venv에서 직접 실행.
+
 ## 과거 케이스 수집 → 백필 (등급 예측 2차 검증용)
 
 **1) 수집** (망 허용 환경 / 서울 IP 권장 — 거래소 공지는 해외 IP 차단 잦음):
