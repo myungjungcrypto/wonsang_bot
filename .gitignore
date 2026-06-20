@@ -21,7 +21,8 @@ venv/
 *.sqlite
 *.sqlite3
 *.db
-data/
+data/*
+!data/cases_seed.example.json
 *.parquet
 logs/
 *.log

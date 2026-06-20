@@ -1,0 +1,53 @@
+{
+  "note": "⚠️ 템플릿/예시입니다. 아래 수치(realized_return_pct, market_cap_usd 등)는 실제 검증된 데이터가 아니라 형식 설명용 합성값입니다. 실제 과거 상장 데이터(공지 시각·컨트랙트·상장후 가격액션으로 계산한 실현수익률·상장시점 시총/소셜 스냅샷)로 교체해서 사용하세요. listed_at 은 KST 오프셋(+09:00) 포함 ISO 권장.",
+  "schema": {
+    "id": "고유키(예: exchange:announcement_id)",
+    "symbol": "티커",
+    "source": "upbit | bithumb",
+    "title": "공지 제목(내러티브 태깅에 사용)",
+    "listed_at": "ISO 시각(+09:00)",
+    "is_krw": "원화마켓 여부",
+    "contracts": "[{chain, address}]",
+    "realized_return_pct": "따리로 실현 가능했던 수익률(%) → 등급 라벨",
+    "market_cap_usd": "(선택) 상장시점 유통시총 스냅샷",
+    "mentions_per_hour": "(선택) 상장시점 소셜 언급/시간 스냅샷"
+  },
+  "cases": [
+    {
+      "id": "example:0001",
+      "symbol": "EXAMPLEA",
+      "source": "bithumb",
+      "title": "[예시] AI 에이전트 프로젝트 원화 마켓 추가",
+      "listed_at": "2025-11-21T23:30:00+09:00",
+      "is_krw": true,
+      "contracts": [{"chain": "solana", "address": "PLACEHOLDER_SOL_ADDRESS"}],
+      "realized_return_pct": 180.0,
+      "market_cap_usd": 1500000,
+      "mentions_per_hour": 160
+    },
+    {
+      "id": "example:0002",
+      "symbol": "EXAMPLEB",
+      "source": "upbit",
+      "title": "[예시] 디지털 자산 추가 (EXAMPLEB) (KRW 마켓)",
+      "listed_at": "2025-09-09T14:00:00+09:00",
+      "is_krw": true,
+      "contracts": [{"chain": "ethereum", "address": "0xPLACEHOLDER"}],
+      "realized_return_pct": 22.0,
+      "market_cap_usd": 90000000,
+      "mentions_per_hour": 40
+    },
+    {
+      "id": "example:0003",
+      "symbol": "EXAMPLEC",
+      "source": "upbit",
+      "title": "[예시] 디지털 자산 추가 (EXAMPLEC) (KRW 마켓)",
+      "listed_at": "2025-07-15T11:00:00+09:00",
+      "is_krw": true,
+      "contracts": [{"chain": "ethereum", "address": "0xPLACEHOLDER2"}],
+      "realized_return_pct": -8.0,
+      "market_cap_usd": 450000000,
+      "mentions_per_hour": 10
+    }
+  ]
+}
