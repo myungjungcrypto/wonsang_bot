@@ -58,6 +58,7 @@ class Config:
     http_proxy: str | None = None           # 차단 대비 프록시(예: http://host:port)
     http_timeout_sec: float = 8.0
     request_user_agent: str = "Mozilla/5.0 (wonsang_bot)"
+    fetch_announcement_body: bool = True    # 상장 감지 시 본문 받아 컨트랙트 추출
 
     # --- 알림(텔레그램) ---
     telegram_token: str | None = None
@@ -93,6 +94,7 @@ class Config:
             bithumb_announcements_url=_get("BITHUMB_ANNOUNCEMENTS_URL", cls.bithumb_announcements_url),  # type: ignore[arg-type]
             http_proxy=_get("HTTP_PROXY_URL"),
             http_timeout_sec=_get_float("HTTP_TIMEOUT_SEC", 8.0),
+            fetch_announcement_body=_get_bool("FETCH_ANNOUNCEMENT_BODY", True),
             telegram_token=_get("TELEGRAM_TOKEN"),
             telegram_chat_id=_get("TELEGRAM_CHAT_ID"),
             telegram_dry_run=_get_bool("TELEGRAM_DRY_RUN", True),

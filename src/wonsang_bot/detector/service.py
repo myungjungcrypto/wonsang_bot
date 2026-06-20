@@ -80,21 +80,31 @@ class DetectorService:
             for ann in find_new(fetched, seen):
                 self.storage.mark_seen(ann)
                 seen.add(ann.key)
-                ev = self._handle(ann)
+                ev = await self._handle(ann, src)
                 if ev is not None:
                     results.append(ev)
                     await self.bus.publish(ev)
         return results
 
-    def _handle(self, ann: Announcement) -> ListingDetected | None:
+    async def _handle(
+        self, ann: Announcement, src: AnnouncementSource
+    ) -> ListingDetected | None:
         parsed = parse_title(ann.title)
         if not parsed.is_listing:
             log.debug("상장 아님(%s): %s [%s]", ann.source, ann.title, parsed.reason)
             return None
 
+        # 상장으로 판단된 건에 한해 본문을 받아 컨트랙트 추출(비용/속도 고려)
+        body: str | None = None
+        if self.config.fetch_announcement_body:
+            try:
+                body = await asyncio.to_thread(src.fetch_detail, ann)
+            except Exception:  # noqa: BLE001
+                log.exception("본문 fetch 실패: %s", ann.key)
+
         contracts = []
         if self.resolver is not None:
-            contracts = self.resolver.resolve(parsed.symbols, ann)
+            contracts = self.resolver.resolve(parsed.symbols, ann, body)
 
         ev = ListingDetected(
             source=ann.source,

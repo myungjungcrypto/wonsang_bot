@@ -9,11 +9,14 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ...core.events import Announcement
 from ...httpclient import HttpClient
-from .base import AnnouncementSource
+from .base import AnnouncementSource, html_to_text
+
+log = logging.getLogger(__name__)
 
 # 공지 상세 URL 템플릿(라이브 확인 후 조정)
 NOTICE_URL_TMPL = "https://feed.bithumb.com/notice/{id}"
@@ -36,6 +39,16 @@ class BithumbSource(AnnouncementSource):
     def fetch(self) -> list[Announcement]:
         payload = self.http.get_json(self.url)
         return self.parse_payload(payload)
+
+    def fetch_detail(self, ann: Announcement) -> str | None:
+        # 빗썸 상세는 HTML 페이지일 가능성이 큼 → 평문화
+        url = ann.url or NOTICE_URL_TMPL.format(id=ann.id)
+        try:
+            html = self.http.get_text(url)
+        except Exception:  # noqa: BLE001
+            log.exception("빗썸 상세 fetch 실패 id=%s", ann.id)
+            return None
+        return html_to_text(html)
 
     @staticmethod
     def parse_payload(payload: Any) -> list[Announcement]:

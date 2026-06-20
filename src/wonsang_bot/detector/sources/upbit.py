@@ -10,11 +10,16 @@
 """
 from __future__ import annotations
 
+import logging
+
 from ...core.events import Announcement
 from ...httpclient import HttpClient
-from .base import AnnouncementSource
+from .base import AnnouncementSource, html_to_text
+
+log = logging.getLogger(__name__)
 
 NOTICE_URL_TMPL = "https://upbit.com/service_center/notice?id={id}"
+DETAIL_URL_TMPL = "https://api-manager.upbit.com/api/v1/announcements/{id}"
 
 
 class UpbitSource(AnnouncementSource):
@@ -27,6 +32,17 @@ class UpbitSource(AnnouncementSource):
     def fetch(self) -> list[Announcement]:
         payload = self.http.get_json(self.url)
         return self.parse_payload(payload)
+
+    def fetch_detail(self, ann: Announcement) -> str | None:
+        # ⚠️ 상세 응답 스키마(data.body)는 라이브에서 재검증 필요
+        try:
+            payload = self.http.get_json(DETAIL_URL_TMPL.format(id=ann.id))
+        except Exception:  # noqa: BLE001
+            log.exception("업비트 상세 fetch 실패 id=%s", ann.id)
+            return None
+        data = payload.get("data", payload) if isinstance(payload, dict) else {}
+        body = data.get("body") or data.get("content") or ""
+        return html_to_text(body)
 
     @staticmethod
     def parse_payload(payload: dict) -> list[Announcement]:
