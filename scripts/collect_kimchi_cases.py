@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from datetime import datetime, timezone  # noqa: E402
 
 from wonsang_bot.collector.archive import fetch_upbit_archive  # noqa: E402
+from wonsang_bot.collector.coingecko import CoinGeckoTokens  # noqa: E402
 from wonsang_bot.collector.dex import GeckoTerminalDEX  # noqa: E402
 from wonsang_bot.collector.exchanges import (  # noqa: E402
     Quote,
@@ -51,7 +52,7 @@ def main() -> None:
     pages = int(os.environ.get("COLLECT_PAGES", "40"))
     entry_offset = float(os.environ.get("COLLECT_ENTRY_MIN", "5")) * 60
     sleep_s = float(os.environ.get("COLLECT_SLEEP", "0"))  # throttle 가 페이싱 담당
-    dex_min_liq = float(os.environ.get("COLLECT_DEX_MIN_LIQ", "5000"))  # dust 풀 무시
+    dex_min_liq = float(os.environ.get("COLLECT_DEX_MIN_LIQ", "30000"))  # 실매수 가능 풀만
     limit = int(os.environ.get("COLLECT_LIMIT", "0"))
 
     config = Config.load()
@@ -74,6 +75,15 @@ def main() -> None:
                           user_agent=config.request_user_agent,
                           min_interval=dex_interval, max_retries=4, backoff=5.0)
     dex = GeckoTerminalDEX(http_dex)
+    # 같은 코인의 전체 체인 컨트랙트 해소(체인마다 주소 다름) — coingecko
+    cg_tokens = None
+    if config.coingecko_enabled:
+        http_cg = HttpClient(timeout=config.http_timeout_sec, proxy=None,
+                             user_agent=config.request_user_agent,
+                             min_interval=2.0, max_retries=3, backoff=5.0)
+        cg_tokens = CoinGeckoTokens(config, http_cg)
+    else:
+        log.warning("COINGECKO_ENABLED=false → 체인간 컨트랙트 해소 불가(공지 체인만 DEX 조회)")
 
     anns = fetch_upbit_archive(http_proxy, config.upbit_announcements_url, pages=pages)
     log.info("공지 아카이브 %d건 수신 (pages=%d)", len(anns), pages)
@@ -115,11 +125,19 @@ def main() -> None:
                 if contracts and (quote.buy_price is None or len(quote.venues) < 2
                                   or quote.price_spread > 0.15):
                     c0 = contracts[0]
-                    dq = dex.quote_at(c0.chain, c0.address, announce_ts + entry_offset)
-                    if dq and dq[1] >= dex_min_liq:  # dust 풀(가짜 anchor) 제외
+                    # 같은 코인의 전체 체인 주소(체인마다 다름) → 가장 유동성 큰 풀 선택
+                    chain_addrs = {c0.chain: c0.address}
+                    if cg_tokens is not None:
+                        chain_addrs = cg_tokens.platforms_for(c0.chain, c0.address)
+                    best = None  # (price, liq)
+                    for ch, ad in chain_addrs.items():
+                        dq = dex.quote_at(ch, ad, announce_ts + entry_offset)
+                        if dq and dq[1] >= dex_min_liq and (best is None or dq[1] > best[1]):
+                            best = dq
+                    if best:  # 실매수 가능 유동성(>=min_liq) 풀의 가격만 anchor 로
                         venues = dict(quote.venues)
-                        venues["dex"] = {"price": round(dq[0], 8), "liq": round(dq[1], 2)}
-                        p, v, sp = select_buy_venue(venues, anchor_price=dq[0])
+                        venues["dex"] = {"price": round(best[0], 8), "liq": round(best[1], 2)}
+                        p, v, sp = select_buy_venue(venues, anchor_price=best[0])
                         quote = Quote(buy_price=p, buy_venue=v, price_spread=sp, venues=venues)
                         used_dex = True
                 usd_buy = quote.buy_price  # 기준가 근처 중 유동성 최대(CEX+DEX)
