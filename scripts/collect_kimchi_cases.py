@@ -68,10 +68,11 @@ def main() -> None:
     upbit = UpbitMarketBackfiller(http_upbit)
     overseas = build_overseas_aggregator(config)  # 7개 CEX 집계(거래소별 독립 client)
     src = UpbitSource(config.upbit_announcements_url, http_proxy)  # 공지 본문(컨트랙트)
-    # DEX: Geckoterminal 무료 ~30/min → 2.5s 간격 + 429 시 긴 백오프
+    # DEX: Geckoterminal 무료 ~30/min → 간격 넉넉히(env로 조정) + 429 긴 백오프
+    dex_interval = float(os.environ.get("COLLECT_DEX_INTERVAL", "4.0"))
     http_dex = HttpClient(timeout=config.http_timeout_sec, proxy=None,
                           user_agent=config.request_user_agent,
-                          min_interval=2.5, max_retries=3, backoff=5.0)
+                          min_interval=dex_interval, max_retries=4, backoff=5.0)
     dex = GeckoTerminalDEX(http_dex)
 
     anns = fetch_upbit_archive(http_proxy, config.upbit_announcements_url, pages=pages)
