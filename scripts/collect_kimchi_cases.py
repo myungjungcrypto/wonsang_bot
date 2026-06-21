@@ -27,11 +27,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from datetime import datetime, timezone  # noqa: E402
 
 from wonsang_bot.collector.archive import fetch_upbit_archive  # noqa: E402
+from wonsang_bot.collector.dex import GeckoTerminalDEX  # noqa: E402
 from wonsang_bot.collector.exchanges import build_overseas_aggregator  # noqa: E402
 from wonsang_bot.collector.kimchi import kimchi_return_pct  # noqa: E402
 from wonsang_bot.collector.upbit_market import UpbitMarketBackfiller  # noqa: E402
 from wonsang_bot.config import Config  # noqa: E402
+from wonsang_bot.detector.contract_extract import extract_contracts_from_text  # noqa: E402
 from wonsang_bot.detector.parser import parse_title  # noqa: E402
+from wonsang_bot.detector.sources.upbit import UpbitSource  # noqa: E402
 from wonsang_bot.httpclient import HttpClient  # noqa: E402
 from wonsang_bot.logging_conf import setup_logging  # noqa: E402
 from wonsang_bot.predictor.features.base import parse_iso  # noqa: E402
@@ -58,6 +61,12 @@ def main() -> None:
                             min_interval=0.2, max_retries=5)
     upbit = UpbitMarketBackfiller(http_upbit)
     overseas = build_overseas_aggregator(config)  # 7개 CEX 집계(거래소별 독립 client)
+    src = UpbitSource(config.upbit_announcements_url, http_proxy)  # 공지 본문(컨트랙트)
+    # DEX: Geckoterminal 무료 한도 ~30/min → 2s 간격
+    http_dex = HttpClient(timeout=config.http_timeout_sec, proxy=None,
+                          user_agent=config.request_user_agent,
+                          min_interval=2.0, max_retries=3)
+    dex = GeckoTerminalDEX(http_dex)
 
     anns = fetch_upbit_archive(http_proxy, config.upbit_announcements_url, pages=pages)
     log.info("공지 아카이브 %d건 수신 (pages=%d)", len(anns), pages)
@@ -73,6 +82,13 @@ def main() -> None:
             continue
         announce_ts = dt.timestamp()
 
+        # 공지 본문에서 컨트랙트 추출(DEX 가격·충돌제거 기준점)
+        try:
+            body = src.fetch_detail(ann)
+        except Exception:  # noqa: BLE001
+            body = None
+        contracts = extract_contracts_from_text(body) if body else []
+
         for symbol in parsed.symbols:
             if symbol in seen:
                 continue
@@ -86,10 +102,20 @@ def main() -> None:
                 if listing_ts is None:
                     log.info("스킵 %s: 업비트 KRW 마켓 없음(상장폐지/개명)", symbol)
                     continue
-                quote = overseas.quote(symbol, announce_ts + entry_offset)
-                usd_buy = quote.buy_price  # 유사가격 중 유동성 최대 거래소 가격
+                # DEX 가격(컨트랙트 기준=정답 기준점) → CEX 충돌 제거 + DEX전용 코인 커버
+                extra_venues = None
+                anchor = None
+                if contracts:
+                    c0 = contracts[0]
+                    dq = dex.quote_at(c0.chain, c0.address, announce_ts + entry_offset)
+                    if dq:
+                        extra_venues = {"dex": {"price": round(dq[0], 8), "liq": round(dq[1], 2)}}
+                        anchor = dq[0]
+                quote = overseas.quote(symbol, announce_ts + entry_offset,
+                                       extra_venues=extra_venues, anchor_price=anchor)
+                usd_buy = quote.buy_price  # 기준가 근처 중 유동성 최대(CEX+DEX)
                 if usd_buy is None:
-                    log.info("스킵 %s: 어느 CEX에도 없음(TGE 동시상장/DEX 전용 의심)", symbol)
+                    log.info("스킵 %s: CEX·DEX 어디에도 없음(TGE 동시상장 의심)", symbol)
                     continue
                 usdt_krw = upbit.price_at("KRW-USDT", listing_ts)
                 if usdt_krw is None:
@@ -122,7 +148,7 @@ def main() -> None:
                 "title": ann.title,
                 "listed_at": dt.isoformat(),
                 "is_krw": True,
-                "contracts": [],
+                "contracts": [{"chain": c.chain, "address": c.address} for c in contracts],
                 "realized_return_pct": ret,
                 "market_cap_usd": None,
                 "mentions_per_hour": None,
@@ -140,8 +166,9 @@ def main() -> None:
                     "venue_count": len(quote.venues),  # 가용성 피처
                 },
             })
-            log.info("케이스 %s: 매수$%.4f@%s(%d개소,스프레드%.0f%%) ret=%.1f%% %s (gap %.1fh)",
+            log.info("케이스 %s: 매수$%.4f@%s(%d곳%s,스프레드%.0f%%) ret=%.1f%% %s (gap %.1fh)",
                      symbol, usd_buy, quote.buy_venue, len(quote.venues),
+                     "+DEX" if (extra_venues and "dex" in quote.venues) else "",
                      quote.price_spread * 100, ret,
                      "[KRW만추가]" if pre_listed else "[신규]",
                      (listing_ts - announce_ts) / 3600)

@@ -70,17 +70,21 @@ def parse_bitget(p):   # data: [ts,o,h,l,c,baseVol,quoteVol,...]
 # ---------------- 매수처 선택 (순수) ----------------
 
 def select_buy_venue(
-    venues: dict[str, dict], band: float = 0.12
+    venues: dict[str, dict], band: float = 0.12, anchor_price: Optional[float] = None
 ) -> tuple[Optional[float], Optional[str], float]:
-    """가격 비슷(중앙값 ±band)한 곳 중 유동성 최대 → (price, venue, price_spread)."""
+    """기준가(±band) 근처 거래소 중 유동성 최대 → (price, venue, price_spread).
+
+    anchor_price 가 주어지면(컨트랙트 검증된 DEX 가격) 그것을 기준 → 티커충돌 제거.
+    없으면 중앙값 기준.
+    """
     items = [(n, d["price"], d.get("liq", 0.0)) for n, d in venues.items()
              if d.get("price") and d["price"] > 0]
     if not items:
         return None, None, 0.0
     prices = sorted(p for _, p, _ in items)
-    med = prices[len(prices) // 2]
+    ref = anchor_price if (anchor_price and anchor_price > 0) else prices[len(prices) // 2]
     spread = round(prices[-1] / prices[0] - 1.0, 3) if prices[0] > 0 else 0.0
-    similar = [t for t in items if med > 0 and abs(t[1] - med) / med <= band]
+    similar = [t for t in items if ref > 0 and abs(t[1] - ref) / ref <= band]
     pool = similar or items
     name, price, _ = max(pool, key=lambda t: t[2])  # 유동성 최대
     return price, name, spread
@@ -216,13 +220,21 @@ class OverseasAggregator:
     def __init__(self, exchanges: list[_Exchange]) -> None:
         self.exchanges = exchanges
 
-    def quote(self, symbol: str, ts: float, pad_sec: float = 900) -> Quote:
+    def quote(
+        self, symbol: str, ts: float, pad_sec: float = 900,
+        extra_venues: Optional[dict[str, dict]] = None,
+        anchor_price: Optional[float] = None,
+    ) -> Quote:
+        """CEX 시세 집계 + extra_venues(예: DEX) 병합 → 매수처 선택.
+        anchor_price(컨트랙트 검증 DEX가)가 있으면 그 기준으로 충돌 제거."""
         venues: dict[str, dict] = {}
         for ex in self.exchanges:
             q = ex.quote_at(symbol, ts, pad_sec)
             if q:
                 venues[ex.name] = {"price": round(q[0], 8), "liq": round(q[1], 2)}
-        price, venue, spread = select_buy_venue(venues)
+        if extra_venues:
+            venues.update(extra_venues)
+        price, venue, spread = select_buy_venue(venues, anchor_price=anchor_price)
         return Quote(buy_price=price, buy_venue=venue, price_spread=spread, venues=venues)
 
 
