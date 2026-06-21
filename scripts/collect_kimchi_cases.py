@@ -28,7 +28,11 @@ from datetime import datetime, timezone  # noqa: E402
 
 from wonsang_bot.collector.archive import fetch_upbit_archive  # noqa: E402
 from wonsang_bot.collector.dex import GeckoTerminalDEX  # noqa: E402
-from wonsang_bot.collector.exchanges import build_overseas_aggregator  # noqa: E402
+from wonsang_bot.collector.exchanges import (  # noqa: E402
+    Quote,
+    build_overseas_aggregator,
+    select_buy_venue,
+)
 from wonsang_bot.collector.kimchi import kimchi_return_pct  # noqa: E402
 from wonsang_bot.collector.upbit_market import UpbitMarketBackfiller  # noqa: E402
 from wonsang_bot.config import Config  # noqa: E402
@@ -54,7 +58,8 @@ def main() -> None:
 
     # 공지: 프록시(Cloudflare 우회). 업비트/바이낸스: 직접 + 레이트리밋 throttle.
     http_proxy = HttpClient(timeout=config.http_timeout_sec, proxy=config.http_proxy,
-                            user_agent=config.request_user_agent)
+                            user_agent=config.request_user_agent,
+                            min_interval=0.5, max_retries=3)
     # 업비트 quotation 한도 ~10req/s → 0.2s 간격(5req/s) + 429 백오프
     http_upbit = HttpClient(timeout=config.http_timeout_sec, proxy=None,
                             user_agent=config.request_user_agent,
@@ -62,10 +67,10 @@ def main() -> None:
     upbit = UpbitMarketBackfiller(http_upbit)
     overseas = build_overseas_aggregator(config)  # 7개 CEX 집계(거래소별 독립 client)
     src = UpbitSource(config.upbit_announcements_url, http_proxy)  # 공지 본문(컨트랙트)
-    # DEX: Geckoterminal 무료 한도 ~30/min → 2s 간격
+    # DEX: Geckoterminal 무료 ~30/min → 2.5s 간격 + 429 시 긴 백오프
     http_dex = HttpClient(timeout=config.http_timeout_sec, proxy=None,
                           user_agent=config.request_user_agent,
-                          min_interval=2.0, max_retries=3)
+                          min_interval=2.5, max_retries=3, backoff=5.0)
     dex = GeckoTerminalDEX(http_dex)
 
     anns = fetch_upbit_archive(http_proxy, config.upbit_announcements_url, pages=pages)
@@ -102,17 +107,19 @@ def main() -> None:
                 if listing_ts is None:
                     log.info("스킵 %s: 업비트 KRW 마켓 없음(상장폐지/개명)", symbol)
                     continue
-                # DEX 가격(컨트랙트 기준=정답 기준점) → CEX 충돌 제거 + DEX전용 코인 커버
-                extra_venues = None
-                anchor = None
-                if contracts:
+                quote = overseas.quote(symbol, announce_ts + entry_offset)
+                # CEX 불충분(가격없음/1곳뿐/스프레드 큼=충돌의심)일 때만 DEX 보강
+                used_dex = False
+                if contracts and (quote.buy_price is None or len(quote.venues) < 2
+                                  or quote.price_spread > 0.15):
                     c0 = contracts[0]
                     dq = dex.quote_at(c0.chain, c0.address, announce_ts + entry_offset)
                     if dq:
-                        extra_venues = {"dex": {"price": round(dq[0], 8), "liq": round(dq[1], 2)}}
-                        anchor = dq[0]
-                quote = overseas.quote(symbol, announce_ts + entry_offset,
-                                       extra_venues=extra_venues, anchor_price=anchor)
+                        venues = dict(quote.venues)
+                        venues["dex"] = {"price": round(dq[0], 8), "liq": round(dq[1], 2)}
+                        p, v, sp = select_buy_venue(venues, anchor_price=dq[0])
+                        quote = Quote(buy_price=p, buy_venue=v, price_spread=sp, venues=venues)
+                        used_dex = True
                 usd_buy = quote.buy_price  # 기준가 근처 중 유동성 최대(CEX+DEX)
                 if usd_buy is None:
                     log.info("스킵 %s: CEX·DEX 어디에도 없음(TGE 동시상장 의심)", symbol)
@@ -168,7 +175,7 @@ def main() -> None:
             })
             log.info("케이스 %s: 매수$%.4f@%s(%d곳%s,스프레드%.0f%%) ret=%.1f%% %s (gap %.1fh)",
                      symbol, usd_buy, quote.buy_venue, len(quote.venues),
-                     "+DEX" if (extra_venues and "dex" in quote.venues) else "",
+                     "+DEX" if used_dex else "",
                      quote.price_spread * 100, ret,
                      "[KRW만추가]" if pre_listed else "[신규]",
                      (listing_ts - announce_ts) / 3600)

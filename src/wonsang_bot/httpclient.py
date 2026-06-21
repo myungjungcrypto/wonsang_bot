@@ -55,11 +55,10 @@ class HttpClient:
             self._throttle()
             resp = self._session.request(method, url, timeout=self._timeout, **kwargs)
             if resp.status_code in _RETRY_STATUS and attempt < self._max_retries:
+                delay = self._backoff * (2 ** attempt)
                 ra = resp.headers.get("Retry-After")
-                delay = (
-                    float(ra) if ra and ra.replace(".", "", 1).isdigit()
-                    else self._backoff * (2 ** attempt)
-                )
+                if ra and ra.replace(".", "", 1).isdigit():
+                    delay = max(delay, float(ra))  # Retry-After 가 더 길면 그걸로
                 log.warning("HTTP %s → %ss 후 재시도(%d/%d): %s",
                             resp.status_code, round(delay, 2), attempt + 1,
                             self._max_retries, url)
