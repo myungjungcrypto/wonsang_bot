@@ -84,7 +84,7 @@ def main() -> None:
             try:
                 listing_ts, krw_sell = upbit.first_candle(market)
                 if listing_ts is None:
-                    log.info("스킵 %s: 업비트 KRW 캔들 없음", symbol)
+                    log.info("스킵 %s: 업비트 KRW 마켓 없음(상장폐지/개명)", symbol)
                     continue
                 quote = overseas.quote(symbol, announce_ts + entry_offset)
                 usd_buy = quote.buy_price  # 유사가격 중 유동성 최대 거래소 가격

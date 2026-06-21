@@ -67,14 +67,17 @@ class UpbitMarketBackfiller:
         return parse_krw_markets(payload if isinstance(payload, list) else [])
 
     def find_listing_day(self, market: str, max_pages: int = 40) -> Optional[float]:
-        """가장 오래된 일봉 시각(상장 날짜, UTC epoch). 없으면 None."""
+        """가장 오래된 일봉 시각(상장 날짜, UTC epoch). 마켓 없으면(상장폐지 등) None."""
         to: Optional[str] = None
         oldest: Optional[str] = None
         for _ in range(max_pages):
             url = f"{UPBIT_API}/candles/days?market={market}&count=200"
             if to:
                 url += f"&to={quote(to)}"
-            rows = self.http.get_json(url)
+            try:
+                rows = self.http.get_json(url)
+            except Exception:  # noqa: BLE001 - 404(상장폐지/개명) 등은 그냥 없음 처리
+                break
             if not isinstance(rows, list) or not rows:
                 break
             oldest = rows[-1].get("candle_date_time_utc")
@@ -102,7 +105,10 @@ class UpbitMarketBackfiller:
                 f"{UPBIT_API}/candles/minutes/1?market={market}"
                 f"&count=200&to={quote(_fmt(to))}"
             )
-            rows = self.http.get_json(url)
+            try:
+                rows = self.http.get_json(url)
+            except Exception:  # noqa: BLE001
+                break
             chunk = upbit_candles_to_series(
                 rows if isinstance(rows, list) else [], price_key=price_key
             )
