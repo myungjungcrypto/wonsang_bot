@@ -60,23 +60,32 @@ def _get_json(key: str, default):
         return default
 
 
+# 기본값 상수 (slots=True 데이터클래스는 cls.<필드>로 기본값 접근 불가 → 상수로 공유)
+_UPBIT_URL = (
+    "https://api-manager.upbit.com/api/v1/announcements"
+    "?os=web&page=1&per_page=20&category=trade"
+)
+_BITHUMB_URL = "https://api.bithumb.com/v1/notices?count=20"
+_COINGECKO_URL = "https://api.coingecko.com/api/v3"
+# 실제 브라우저 UA (api-manager.upbit.com 등 봇 차단 회피용)
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+
 @dataclass(slots=True)
 class Config:
     # --- 감지 ---
     poll_interval_sec: float = 2.0          # 공지 폴링 주기(초). 라이브에선 더 짧게.
     upbit_enabled: bool = True
     bithumb_enabled: bool = True
-    upbit_announcements_url: str = (
-        "https://api-manager.upbit.com/api/v1/announcements"
-        "?os=web&page=1&per_page=20&category=trade"
-    )
+    upbit_announcements_url: str = _UPBIT_URL
     # 빗썸 공지 엔드포인트는 라이브에서 재검증 필요(아래 어댑터 주석 참고).
-    bithumb_announcements_url: str = (
-        "https://api.bithumb.com/v1/notices?count=20"
-    )
+    bithumb_announcements_url: str = _BITHUMB_URL
     http_proxy: str | None = None           # 차단 대비 프록시(예: http://host:port)
     http_timeout_sec: float = 8.0
-    request_user_agent: str = "Mozilla/5.0 (wonsang_bot)"
+    request_user_agent: str = _UA
     fetch_announcement_body: bool = True    # 상장 감지 시 본문 받아 컨트랙트 추출
 
     # --- 알림(텔레그램) ---
@@ -128,8 +137,8 @@ class Config:
             poll_interval_sec=_get_float("POLL_INTERVAL_SEC", 2.0),
             upbit_enabled=_get_bool("UPBIT_ENABLED", True),
             bithumb_enabled=_get_bool("BITHUMB_ENABLED", True),
-            upbit_announcements_url=_get("UPBIT_ANNOUNCEMENTS_URL", cls.upbit_announcements_url),  # type: ignore[arg-type]
-            bithumb_announcements_url=_get("BITHUMB_ANNOUNCEMENTS_URL", cls.bithumb_announcements_url),  # type: ignore[arg-type]
+            upbit_announcements_url=_get("UPBIT_ANNOUNCEMENTS_URL", _UPBIT_URL),  # type: ignore[arg-type]
+            bithumb_announcements_url=_get("BITHUMB_ANNOUNCEMENTS_URL", _BITHUMB_URL),  # type: ignore[arg-type]
             http_proxy=_get("HTTP_PROXY_URL"),
             http_timeout_sec=_get_float("HTTP_TIMEOUT_SEC", 8.0),
             fetch_announcement_body=_get_bool("FETCH_ANNOUNCEMENT_BODY", True),
@@ -142,7 +151,7 @@ class Config:
             llm_api_key=_get("ANTHROPIC_API_KEY") or _get("LLM_API_KEY"),
             coingecko_enabled=_get_bool("COINGECKO_ENABLED", False),
             coingecko_api_key=_get("COINGECKO_API_KEY"),
-            coingecko_base_url=_get("COINGECKO_BASE_URL", cls.coingecko_base_url),  # type: ignore[arg-type]
+            coingecko_base_url=_get("COINGECKO_BASE_URL", _COINGECKO_URL),  # type: ignore[arg-type]
             predictor_enabled=_get_bool("PREDICTOR_ENABLED", True),
             w_timing=_get_float("W_TIMING", 1.0),
             w_narrative=_get_float("W_NARRATIVE", 1.5),

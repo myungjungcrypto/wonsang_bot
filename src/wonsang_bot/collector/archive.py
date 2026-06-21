@@ -8,7 +8,7 @@ import logging
 import re
 
 from ..core.events import Announcement
-from ..detector.sources.upbit import UpbitSource
+from ..detector.sources.upbit import WEB_HEADERS, UpbitSource
 from ..httpclient import HttpClient
 
 log = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def fetch_upbit_archive(
     seen: set[str] = set()
     for p in range(1, pages + 1):
         try:
-            payload = http.get_json(page_url(base_url, p))
+            payload = http.get_json(page_url(base_url, p), headers=WEB_HEADERS)
         except Exception:  # noqa: BLE001
             log.exception("아카이브 fetch 실패 page=%s", p)
             break

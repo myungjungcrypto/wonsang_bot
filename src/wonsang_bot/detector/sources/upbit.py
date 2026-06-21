@@ -21,6 +21,12 @@ log = logging.getLogger(__name__)
 NOTICE_URL_TMPL = "https://upbit.com/service_center/notice?id={id}"
 DETAIL_URL_TMPL = "https://api-manager.upbit.com/api/v1/announcements/{id}"
 
+# api-manager.upbit.com 은 봇 차단(Cloudflare)이 있어 웹 브라우저처럼 Referer/Origin 필요
+WEB_HEADERS = {
+    "Referer": "https://upbit.com/service_center/notice",
+    "Origin": "https://upbit.com",
+}
+
 
 class UpbitSource(AnnouncementSource):
     name = "upbit"
@@ -30,13 +36,15 @@ class UpbitSource(AnnouncementSource):
         self.http = http
 
     def fetch(self) -> list[Announcement]:
-        payload = self.http.get_json(self.url)
+        payload = self.http.get_json(self.url, headers=WEB_HEADERS)
         return self.parse_payload(payload)
 
     def fetch_detail(self, ann: Announcement) -> str | None:
         # ⚠️ 상세 응답 스키마(data.body)는 라이브에서 재검증 필요
         try:
-            payload = self.http.get_json(DETAIL_URL_TMPL.format(id=ann.id))
+            payload = self.http.get_json(
+                DETAIL_URL_TMPL.format(id=ann.id), headers=WEB_HEADERS
+            )
         except Exception:  # noqa: BLE001
             log.exception("업비트 상세 fetch 실패 id=%s", ann.id)
             return None

@@ -23,7 +23,11 @@ class HttpClient:
         self._timeout = timeout
         self._session = requests.Session()
         self._session.headers.update(
-            {"User-Agent": user_agent, "Accept": "application/json, text/plain, */*"}
+            {
+                "User-Agent": user_agent,
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            }
         )
         if proxy:
             self._session.proxies.update({"http": proxy, "https": proxy})
