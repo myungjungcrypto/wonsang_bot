@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 from ...core.events import Announcement
 from ...httpclient import HttpClient
@@ -51,6 +53,21 @@ class UpbitSource(AnnouncementSource):
         data = payload.get("data", payload) if isinstance(payload, dict) else {}
         body = data.get("body") or data.get("content") or ""
         return html_to_text(body)
+
+    def is_pre_listed(self, symbol: str) -> bool | None:
+        """BTC/USDT 마켓이 하루 전 이미 있었나 → KRW만 추가된 기존 코인 여부.
+        (api.upbit.com 캔들은 차단 없음. 신규 전체상장은 어제 캔들이 없어 False)"""
+        to = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+        for q in ("BTC", "USDT"):
+            url = (f"https://api.upbit.com/v1/candles/days?market={q}-{symbol}"
+                   f"&count=1&to={quote(to)}")
+            try:
+                rows = self.http.get_json(url)
+                if isinstance(rows, list) and rows:
+                    return True
+            except Exception:  # noqa: BLE001 - 없는 마켓
+                pass
+        return False
 
     @staticmethod
     def parse_payload(payload: dict) -> list[Announcement]:

@@ -105,6 +105,16 @@ def main() -> None:
             if ret is None:
                 continue
 
+            # KRW만 추가(기존 코인) 여부: 공지 1시간 전 BTC/USDT 마켓 캔들이 있었나
+            pre_listed = False
+            for q in ("BTC", "USDT"):
+                try:
+                    if upbit.price_at(f"{q}-{symbol}", announce_ts - 3600) is not None:
+                        pre_listed = True
+                        break
+                except Exception:  # noqa: BLE001 - 없는 마켓은 그냥 신규
+                    pass
+
             cases.append({
                 "id": f"upbit:{symbol}",
                 "symbol": symbol,
@@ -116,6 +126,7 @@ def main() -> None:
                 "realized_return_pct": ret,
                 "market_cap_usd": None,
                 "mentions_per_hour": None,
+                "pre_listed": pre_listed,
                 "meta": {
                     "announce_ts": announce_ts,
                     "listing_ts": listing_ts,
@@ -127,9 +138,10 @@ def main() -> None:
                     "venue_count": len(quote.venues),  # 가용성 피처
                 },
             })
-            log.info("케이스 %s: 매수$%.4f(%d개소:%s) ret=%.1f%% (공지→상장 %.1fh)",
-                     symbol, usd_buy, len(quote.venues),
-                     ",".join(quote.venues), ret, (listing_ts - announce_ts) / 3600)
+            log.info("케이스 %s: 매수$%.4f(%d개소) ret=%.1f%% %s (공지→상장 %.1fh)",
+                     symbol, usd_buy, len(quote.venues), ret,
+                     "[KRW만추가]" if pre_listed else "[신규]",
+                     (listing_ts - announce_ts) / 3600)
         if limit and len(cases) >= limit:
             break
 

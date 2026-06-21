@@ -36,3 +36,7 @@ class AnnouncementSource(ABC):
     def fetch_detail(self, ann: Announcement) -> str | None:
         """공지 본문 평문을 가져온다(컨트랙트 추출용). 기본은 미지원(None)."""
         return None
+
+    def is_pre_listed(self, symbol: str) -> bool | None:
+        """KRW만 추가된 기존 코인인가(BTC/USDT 선상장). 미지원이면 None."""
+        return None

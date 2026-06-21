@@ -48,6 +48,8 @@ class ListingDetected:
     published_at: str | None = None
     detected_at: str = field(default_factory=now_iso)
     confidence: float = 0.0
+    # True=KRW만 추가된 기존 업비트 코인(BTC/USDT 선상장), False=신규 전체상장, None=미상
+    pre_listed: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

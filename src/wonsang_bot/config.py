@@ -110,6 +110,7 @@ class Config:
     w_timing: float = 1.0
     w_narrative: float = 1.5
     w_supply: float = 2.0
+    w_listing_type: float = 2.5     # KRW만 추가(기존 코인) 실패경향 — 강한 신호
     w_marketcap: float = 2.5
     w_social: float = 1.0
     historical_k: int = 3
@@ -158,6 +159,7 @@ class Config:
             w_timing=_get_float("W_TIMING", 1.0),
             w_narrative=_get_float("W_NARRATIVE", 1.5),
             w_supply=_get_float("W_SUPPLY", 2.0),
+            w_listing_type=_get_float("W_LISTING_TYPE", 2.5),
             w_marketcap=_get_float("W_MARKETCAP", 2.5),
             w_social=_get_float("W_SOCIAL", 1.0),
             historical_k=_get_int("HISTORICAL_K", 3),

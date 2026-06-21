@@ -109,6 +109,14 @@ class DetectorService:
         if self.resolver is not None:
             contracts = self.resolver.resolve(parsed.symbols, ann, body)
 
+        # KRW만 추가된 기존 코인 여부(따리 실패 경향 신호)
+        pre_listed: bool | None = None
+        if parsed.symbols:
+            try:
+                pre_listed = src.is_pre_listed(parsed.symbols[0])
+            except Exception:  # noqa: BLE001
+                pre_listed = None
+
         ev = ListingDetected(
             source=ann.source,
             announcement_id=ann.id,
@@ -120,6 +128,7 @@ class DetectorService:
             url=ann.url,
             published_at=ann.published_at,
             confidence=parsed.confidence,
+            pre_listed=pre_listed,
         )
         self.storage.save_listing(ev)
         log.info(
