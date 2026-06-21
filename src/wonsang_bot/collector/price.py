@@ -27,12 +27,12 @@ DEFAULT_EXIT_OFFSET_SEC = 900.0
 
 # ---------------- 국내 캔들 파서 (순수) ----------------
 
-def upbit_candles_to_series(rows: list[dict]) -> Series:
-    """업비트 분봉 응답 → [(epoch_sec, trade_price)]."""
+def upbit_candles_to_series(rows: list[dict], price_key: str = "trade_price") -> Series:
+    """업비트 분봉 응답 → [(epoch_sec, price)]. price_key 로 시가/종가 선택."""
     out: Series = []
     for r in rows or []:
         dt = r.get("candle_date_time_utc")
-        px = r.get("trade_price")
+        px = r.get(price_key)
         if not dt or px is None:
             continue
         try:

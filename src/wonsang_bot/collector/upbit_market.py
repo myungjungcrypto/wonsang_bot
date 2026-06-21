@@ -86,9 +86,10 @@ class UpbitMarketBackfiller:
         return datetime.fromisoformat(oldest).replace(tzinfo=timezone.utc).timestamp()
 
     def fetch_listing_day_minutes(
-        self, market: str, listing_day_ts: float, max_pages: int = 10
+        self, market: str, listing_day_ts: float, max_pages: int = 10,
+        price_key: str = "trade_price",
     ) -> Series:
-        """상장일 분봉을 모은다(첫 체결 ~ 그날 분봉). 첫 15분 수익률 계산용."""
+        """상장일 분봉을 모은다(첫 체결 ~ 그날 분봉)."""
         day_start = (
             datetime.fromtimestamp(listing_day_ts, tz=timezone.utc)
             .replace(hour=0, minute=0, second=0)
@@ -102,7 +103,9 @@ class UpbitMarketBackfiller:
                 f"&count=200&to={quote(_fmt(to))}"
             )
             rows = self.http.get_json(url)
-            chunk = upbit_candles_to_series(rows if isinstance(rows, list) else [])
+            chunk = upbit_candles_to_series(
+                rows if isinstance(rows, list) else [], price_key=price_key
+            )
             if not chunk:
                 break
             series.extend(chunk)
@@ -122,11 +125,12 @@ class UpbitMarketBackfiller:
         return realized_return_from_series(series, entry_offset_sec, exit_offset_sec)
 
     def first_candle(self, market: str) -> tuple[Optional[float], Optional[float]]:
-        """KRW-{심볼} 첫 체결 (상장 오픈) → (listing_ts, price)."""
+        """KRW-{심볼} 첫 체결 (상장 오픈, 첫 캔들 *시가*) → (listing_ts, price)."""
         day = self.find_listing_day(market)
         if day is None:
             return None, None
-        series = self.fetch_listing_day_minutes(market, day)
+        # 시가(opening_price) = 상장 첫 체결가 ("판매가가 찍힌" 그 가격)
+        series = self.fetch_listing_day_minutes(market, day, price_key="opening_price")
         if not series:
             return None, None
         ts, px = sorted(series)[0]
