@@ -63,21 +63,24 @@ pm2 logs wonsang-bot
 
 ## 과거 케이스 수집 → 백필 (등급 예측 2차 검증용)
 
-**1) 수집** (망 허용 환경 / 서울 IP 권장):
+**1) 수집** (망 허용 환경 / 서울 IP + 공지 프록시 필요):
 
-⚠️ **업비트 공지 API(`api-manager.upbit.com`)는 Cloudflare로 DC IP를 차단**한다(헤더 우회 불가). 대신 차단되지 않는 공개 API(`api.upbit.com`)만 쓰는 **마켓목록 기반 수집**을 권장:
+⚠️ 업비트 공지 API(`api-manager.upbit.com`)는 Cloudflare로 DC IP 차단 → **집 프록시 필요**([`docs/PROXY_SETUP.md`](docs/PROXY_SETUP.md)). 캔들(`api.upbit.com`)·바이낸스는 직접 접근.
+
+**권장 — 김프(따리) 모델** (`collect_kimchi_cases.py`):
 ```bash
-COLLECT_LIMIT=20 python scripts/collect_upbit_market.py        # 먼저 20개로 테스트
-python scripts/collect_upbit_market.py data/cases_upbit.json   # 전체(현재 KRW 코인)
+COLLECT_LIMIT=20 python scripts/collect_kimchi_cases.py        # 먼저 20개 테스트
+python scripts/collect_kimchi_cases.py data/cases_kimchi.json  # 전체
 ```
-- 현재 KRW 상장 코인 전체 → 각 **첫 캔들(상장 시점)** 에서 +5분 매수/+15분 매도 수익률 산출.
-- 공지 API가 열린 환경(국내 IP/프록시)이면 공지 기반도 가능: `python scripts/collect_cases.py`
+- **매수: 공지 +5분 해외(바이낸스 USDT)** → **매도: 업비트 상장 오픈(첫 캔들 KRW)**, 환율은 업비트 KRW-USDT.
+- 공지(프록시) + 업비트 캔들 + 바이낸스 + KRW-USDT 환율을 조합한 **실제 따리 수익률**.
+- 대안(참고): `collect_upbit_market.py`(마켓목록·상장후 시점매도), `collect_cases.py`(공지·국내 시점매도).
 
-**라벨 방법론**: 상장 **+5분 매수** → **+15분 시점 매도(고점 아님)** 수익률 → 대성공 ≥25% / 성공 10~25% / 보통 0~10% / 실패 -10~0% / 큰실패 ≤-10%. (`COLLECT_ENTRY_MIN`/`COLLECT_EXIT_MIN`로 조정)
+**라벨**: 대성공 ≥25% / 성공 10~25% / 보통 0~10% / 실패 -10~0% / 큰실패 ≤-10%.
 
 **2) 백필** (오프라인 가능):
 ```bash
-python scripts/backfill_cases.py data/cases_upbit.json
+python scripts/backfill_cases.py data/cases_kimchi.json
 ```
 - 각 케이스를 **라이브와 동일한 피처 추출기**로 재구성 + 실현수익률→등급 라벨 → `cases` 저장.
 - 저장된 케이스는 다음 실행부터 등급 예측의 **2차 등급(최근접 이웃)** 에 자동 반영.

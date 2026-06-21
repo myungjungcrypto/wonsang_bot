@@ -17,7 +17,7 @@ from urllib.parse import quote
 
 from ..httpclient import HttpClient
 from .price import upbit_candles_to_series
-from .returns import Series, point_return_pct
+from .returns import Series, _price_at, point_return_pct
 
 log = logging.getLogger(__name__)
 
@@ -120,3 +120,27 @@ class UpbitMarketBackfiller:
             return None, None
         series = self.fetch_listing_day_minutes(market, day)
         return realized_return_from_series(series, entry_offset_sec, exit_offset_sec)
+
+    def first_candle(self, market: str) -> tuple[Optional[float], Optional[float]]:
+        """KRW-{심볼} 첫 체결 (상장 오픈) → (listing_ts, price)."""
+        day = self.find_listing_day(market)
+        if day is None:
+            return None, None
+        series = self.fetch_listing_day_minutes(market, day)
+        if not series:
+            return None, None
+        ts, px = sorted(series)[0]
+        return ts, px
+
+    def price_at(
+        self, market: str, ts: float, pad_sec: float = 900
+    ) -> Optional[float]:
+        """특정 시점(이상 첫 포인트) KRW 가격. KRW-USDT 환율 조회 등에 사용."""
+        url = (
+            f"{UPBIT_API}/candles/minutes/1?market={market}"
+            f"&count=200&to={quote(_fmt(ts + pad_sec))}"
+        )
+        rows = self.http.get_json(url)
+        series = upbit_candles_to_series(rows if isinstance(rows, list) else [])
+        hit = _price_at(sorted(series), ts)
+        return hit[1] if hit else None
