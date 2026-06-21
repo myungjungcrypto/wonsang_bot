@@ -58,6 +58,23 @@ class TestService(unittest.TestCase):
         self.assertEqual(len(captured), 1)
         storage.close()
 
+    def test_krw_only_skips_non_krw_listing(self):
+        anns = [
+            Announcement("upbit", "10", "BTC, USDT 마켓 신규 거래지원 안내 (PEAQ, LIT)"),
+            Announcement("upbit", "11", "솔스티스(SLX) 신규 거래지원 안내 (KRW, BTC, USDT 마켓) (거래 유의)"),
+        ]
+        cfg = Config(seed_only_first_run=False)  # detector_krw_only 기본 True
+        storage = Storage(":memory:")
+        bus, captured = _bus_with_capture()
+        svc = DetectorService(cfg, storage, bus, [FakeSource("upbit", anns)])
+
+        res = asyncio.run(svc.poll_once())
+        # 비-KRW(PEAQ 배치)는 스킵, KRW 상장+유의(SLX)만 잡힘
+        self.assertEqual([e.symbols for e in res], [["SLX"]])
+        self.assertTrue(res[0].is_krw)
+        self.assertEqual(len(captured), 1)
+        storage.close()
+
     def test_contract_extracted_from_body_into_event(self):
         addr = "0x" + "a" * 40
         anns = [Announcement("upbit", "1", "디지털 자산 추가 (무빙(MOVE)) (KRW 마켓)")]

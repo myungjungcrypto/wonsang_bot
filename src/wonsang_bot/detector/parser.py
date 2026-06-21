@@ -16,16 +16,19 @@ from dataclasses import dataclass, field
 # 시세 기준통화(신규 상장 심볼이 될 수 없음) → 심볼 후보에서 제외
 QUOTE_CCY = {"KRW", "BTC", "USDT", "USDC"}
 
-# 상장으로 볼 수 있는 키워드
+# 명확한 종료/폐지/중단 → 무조건 제외(상장 아님). 신규상장 제목엔 안 나옴.
+TERMINATION_KW = ("종료", "폐지", "중단")
+
+# 상장 신호 → "유의" 등 부가 안내가 붙어도 상장으로 인정(상장+유의가 노른자 따리)
 LISTING_KW = (
-    "디지털 자산", "거래지원", "거래 지원", "신규", "마켓 추가",
-    "원화 마켓", "상장", "마켓 디지털", "마켓 추가 안내",
+    "신규 거래지원", "신규 거래 지원", "거래지원 안내", "디지털 자산 추가",
+    "신규 상장", "마켓 추가", "마켓 디지털 자산", "원화 마켓 추가",
 )
 
-# 상장이 아님(제외) 키워드
-NEG_KW = (
-    "종료", "폐지", "유의", "점검", "중단", "연기", "지연",
-    "이벤트", "에어드랍", "에어드롭", "스냅샷", "리브랜딩", "변경 안내",
+# 상장 신호가 없을 때만 제외하는 부가/주의 안내
+CAUTION_KW = (
+    "유의", "점검", "연기", "지연", "이벤트", "에어드랍", "에어드롭",
+    "스냅샷", "리브랜딩", "변경 안내", "종목 지정",
 )
 
 _PAREN = re.compile(r"\(([^()]*)\)")            # 가장 안쪽 괄호 내용
@@ -70,13 +73,20 @@ def extract_markets(title: str) -> tuple[list[str], bool]:
 
 
 def classify(title: str) -> tuple[bool, str]:
-    """상장 공지 여부 + 사유."""
-    neg = [k for k in NEG_KW if k in title]
-    if neg:
-        return False, f"제외 키워드: {','.join(neg)}"
+    """상장 공지 여부 + 사유.
+
+    순서가 중요: ① 종료/폐지면 제외 → ② 상장 키워드 있으면 상장(유의가 붙어도)
+    → ③ 상장 신호 없이 유의/점검 등만 있으면 제외.
+    """
+    term = [k for k in TERMINATION_KW if k in title]
+    if term:
+        return False, f"종료/폐지: {','.join(term)}"
     pos = [k for k in LISTING_KW if k in title]
     if pos:
-        return True, f"상장 키워드: {','.join(pos)}"
+        return True, f"상장: {','.join(pos)}"
+    caution = [k for k in CAUTION_KW if k in title]
+    if caution:
+        return False, f"부가/주의: {','.join(caution)}"
     return False, "상장 키워드 없음"
 
 

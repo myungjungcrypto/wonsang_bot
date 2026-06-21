@@ -59,6 +59,19 @@ class TestClassify(unittest.TestCase):
         ok, _ = classify("서버 점검 안내")
         self.assertFalse(ok)
 
+    def test_listing_with_caution_is_still_listing(self):
+        # 실데이터 버그: 상장 + 유의가 같이 붙은 KRW 상장(노른자 따리)을 놓치면 안 됨
+        ok, _ = classify("솔스티스(SLX) 신규 거래지원 안내 (KRW, BTC, USDT 마켓) (거래 유의 종목 안내)")
+        self.assertTrue(ok)
+
+    def test_caution_only_not_listing(self):
+        ok, _ = classify("커널다오(KERNEL) 거래 유의 종목 지정 해제 안내")
+        self.assertFalse(ok)
+
+    def test_halt_not_listing(self):
+        ok, _ = classify("엔케이엔(NKN) 거래지원 종료 안내 (6/15 15:00)")
+        self.assertFalse(ok)
+
 
 class TestParseTitle(unittest.TestCase):
     def test_full_krw_listing_high_confidence(self):
@@ -72,6 +85,19 @@ class TestParseTitle(unittest.TestCase):
         p = parse_title("거래지원 종료 안내 (무빙(MOVE)) (KRW 마켓)")
         self.assertFalse(p.is_listing)
         self.assertLess(p.confidence, 0.6)
+
+    def test_krw_listing_with_caution(self):
+        # SLX/TRAC/IRYS 류: 상장+유의 → 반드시 잡혀야(원화 따리 타겟)
+        p = parse_title("아이리스(IRYS) 신규 거래지원 안내 (KRW, BTC, USDT 마켓) (거래 유의)")
+        self.assertTrue(p.is_listing)
+        self.assertEqual(p.symbols, ["IRYS"])
+        self.assertTrue(p.is_krw)
+
+    def test_multi_coin_btc_usdt_listing_not_krw(self):
+        p = parse_title("BTC, USDT 마켓 신규 거래지원 안내 (PEAQ, LIT, KMNO)")
+        self.assertTrue(p.is_listing)
+        self.assertFalse(p.is_krw)
+        self.assertIn("PEAQ", p.symbols)
 
 
 if __name__ == "__main__":

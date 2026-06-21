@@ -87,6 +87,7 @@ class Config:
     http_timeout_sec: float = 8.0
     request_user_agent: str = _UA
     fetch_announcement_body: bool = True    # 상장 감지 시 본문 받아 컨트랙트 추출
+    detector_krw_only: bool = True          # 원화(KRW) 상장만 감지/알림(따리 타겟)
 
     # --- 알림(텔레그램) ---
     telegram_token: str | None = None
@@ -142,6 +143,7 @@ class Config:
             http_proxy=_get("HTTP_PROXY_URL"),
             http_timeout_sec=_get_float("HTTP_TIMEOUT_SEC", 8.0),
             fetch_announcement_body=_get_bool("FETCH_ANNOUNCEMENT_BODY", True),
+            detector_krw_only=_get_bool("DETECTOR_KRW_ONLY", True),
             telegram_token=_get("TELEGRAM_TOKEN"),
             telegram_chat_id=_get("TELEGRAM_CHAT_ID"),
             telegram_dry_run=_get_bool("TELEGRAM_DRY_RUN", True),

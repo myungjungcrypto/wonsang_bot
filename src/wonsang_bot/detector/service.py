@@ -93,6 +93,9 @@ class DetectorService:
         if not parsed.is_listing:
             log.debug("상장 아님(%s): %s [%s]", ann.source, ann.title, parsed.reason)
             return None
+        if self.config.detector_krw_only and not parsed.is_krw:
+            log.debug("KRW 아님, 스킵(%s): %s", ann.source, ann.title)
+            return None
 
         # 상장으로 판단된 건에 한해 본문을 받아 컨트랙트 추출(비용/속도 고려)
         body: str | None = None
