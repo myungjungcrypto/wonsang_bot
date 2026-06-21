@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from datetime import datetime, timezone  # noqa: E402
 
 from wonsang_bot.collector.archive import fetch_upbit_archive  # noqa: E402
-from wonsang_bot.collector.binance import BinancePriceProvider  # noqa: E402
+from wonsang_bot.collector.exchanges import build_overseas_aggregator  # noqa: E402
 from wonsang_bot.collector.kimchi import kimchi_return_pct  # noqa: E402
 from wonsang_bot.collector.upbit_market import UpbitMarketBackfiller  # noqa: E402
 from wonsang_bot.config import Config  # noqa: E402
@@ -56,11 +56,8 @@ def main() -> None:
     http_upbit = HttpClient(timeout=config.http_timeout_sec, proxy=None,
                             user_agent=config.request_user_agent,
                             min_interval=0.2, max_retries=5)
-    http_binance = HttpClient(timeout=config.http_timeout_sec, proxy=None,
-                              user_agent=config.request_user_agent,
-                              min_interval=0.1, max_retries=3)
     upbit = UpbitMarketBackfiller(http_upbit)
-    binance = BinancePriceProvider(http_binance)
+    overseas = build_overseas_aggregator(config)  # 7개 CEX 집계(거래소별 독립 client)
 
     anns = fetch_upbit_archive(http_proxy, config.upbit_announcements_url, pages=pages)
     log.info("공지 아카이브 %d건 수신 (pages=%d)", len(anns), pages)
@@ -89,9 +86,10 @@ def main() -> None:
                 if listing_ts is None:
                     log.info("스킵 %s: 업비트 KRW 캔들 없음", symbol)
                     continue
-                usd_buy = binance.price_at(symbol, announce_ts + entry_offset)
+                quote = overseas.quote(symbol, announce_ts + entry_offset)
+                usd_buy = quote.best_usd
                 if usd_buy is None:
-                    log.info("스킵 %s: 바이낸스 USDT 가격 없음(상장 안돼있던 코인?)", symbol)
+                    log.info("스킵 %s: 어느 CEX에도 없음(TGE 동시상장/DEX 전용 의심)", symbol)
                     continue
                 usdt_krw = upbit.price_at("KRW-USDT", listing_ts)
                 if usdt_krw is None:
@@ -125,11 +123,13 @@ def main() -> None:
                     "krw_sell": krw_sell,
                     "usdt_krw": usdt_krw,
                     "gap_hours": round((listing_ts - announce_ts) / 3600, 2),
+                    "venues": quote.venues,            # 거래소→가격
+                    "venue_count": len(quote.venues),  # 가용성 피처
                 },
             })
-            log.info("케이스 %s: 매수$%.4f 매도%.0f₩(=%.4f USDT) ret=%.1f%% (공지→상장 %.1fh)",
-                     symbol, usd_buy, krw_sell, krw_sell / usdt_krw, ret,
-                     (listing_ts - announce_ts) / 3600)
+            log.info("케이스 %s: 매수$%.4f(%d개소:%s) ret=%.1f%% (공지→상장 %.1fh)",
+                     symbol, usd_buy, len(quote.venues),
+                     ",".join(quote.venues), ret, (listing_ts - announce_ts) / 3600)
         if limit and len(cases) >= limit:
             break
 
