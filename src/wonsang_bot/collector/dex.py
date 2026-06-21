@@ -85,9 +85,11 @@ class GeckoTerminalDEX:
             if not pools:
                 return None
             pool_addr, reserve = pools[0]  # 유동성 최대 풀
+            # token={address} 로 '우리 토큰'의 USD 가격을 명시(풀 base/quote 무관)
             ohlcv = parse_ohlcv(self.http.get_json(
                 f"{self.base}/networks/{net}/pools/{pool_addr}/ohlcv/minute"
-                f"?aggregate=1&before_timestamp={int(ts + pad_sec)}&limit=100&currency=usd"
+                f"?aggregate=1&before_timestamp={int(ts + pad_sec)}"
+                f"&limit=100&currency=usd&token={address}"
             ))
             hit = _price_at(sorted(ohlcv), ts)
             if hit is None or hit[1] <= 0:
