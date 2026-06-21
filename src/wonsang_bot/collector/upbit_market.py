@@ -125,12 +125,15 @@ class UpbitMarketBackfiller:
         return realized_return_from_series(series, entry_offset_sec, exit_offset_sec)
 
     def first_candle(self, market: str) -> tuple[Optional[float], Optional[float]]:
-        """KRW-{심볼} 첫 체결 (상장 오픈, 첫 캔들 *시가*) → (listing_ts, price)."""
+        """KRW-{심볼} 첫 체결 (상장 오픈) → (listing_ts, price).
+
+        첫 1분봉 *종가*(trade_price) 사용 — 시가는 단일가/동시호가 artifact(이상값)가
+        섞일 수 있어 종가가 더 안정적·현실적("상장 직후 1분 내 매도").
+        """
         day = self.find_listing_day(market)
         if day is None:
             return None, None
-        # 시가(opening_price) = 상장 첫 체결가 ("판매가가 찍힌" 그 가격)
-        series = self.fetch_listing_day_minutes(market, day, price_key="opening_price")
+        series = self.fetch_listing_day_minutes(market, day, price_key="trade_price")
         if not series:
             return None, None
         ts, px = sorted(series)[0]
