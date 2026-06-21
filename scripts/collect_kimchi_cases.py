@@ -51,6 +51,7 @@ def main() -> None:
     pages = int(os.environ.get("COLLECT_PAGES", "40"))
     entry_offset = float(os.environ.get("COLLECT_ENTRY_MIN", "5")) * 60
     sleep_s = float(os.environ.get("COLLECT_SLEEP", "0"))  # throttle 가 페이싱 담당
+    dex_min_liq = float(os.environ.get("COLLECT_DEX_MIN_LIQ", "5000"))  # dust 풀 무시
     limit = int(os.environ.get("COLLECT_LIMIT", "0"))
 
     config = Config.load()
@@ -114,7 +115,7 @@ def main() -> None:
                                   or quote.price_spread > 0.15):
                     c0 = contracts[0]
                     dq = dex.quote_at(c0.chain, c0.address, announce_ts + entry_offset)
-                    if dq:
+                    if dq and dq[1] >= dex_min_liq:  # dust 풀(가짜 anchor) 제외
                         venues = dict(quote.venues)
                         venues["dex"] = {"price": round(dq[0], 8), "liq": round(dq[1], 2)}
                         p, v, sp = select_buy_venue(venues, anchor_price=dq[0])
