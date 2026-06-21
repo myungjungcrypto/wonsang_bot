@@ -62,18 +62,21 @@ pm2 logs wonsang-bot
 
 ## 과거 케이스 수집 → 백필 (등급 예측 2차 검증용)
 
-**1) 수집** (망 허용 환경 / 서울 IP 권장 — 거래소 공지는 해외 IP 차단 잦음):
+**1) 수집** (망 허용 환경 / 서울 IP 권장):
+
+⚠️ **업비트 공지 API(`api-manager.upbit.com`)는 Cloudflare로 DC IP를 차단**한다(헤더 우회 불가). 대신 차단되지 않는 공개 API(`api.upbit.com`)만 쓰는 **마켓목록 기반 수집**을 권장:
 ```bash
-COINGECKO_ENABLED=true python scripts/collect_cases.py [출력.json]
-# 옵션: COLLECT_PAGES=20 COLLECT_WINDOW_H=48 COLLECT_SLEEP=1.5
+COLLECT_LIMIT=20 python scripts/collect_upbit_market.py        # 먼저 20개로 테스트
+python scripts/collect_upbit_market.py data/cases_upbit.json   # 전체(현재 KRW 코인)
 ```
-- 업비트 공지 아카이브를 훑어 과거 원화상장을 찾고, **국내 KRW 캔들**로 실현수익률, (선택)코인게코로 시총 스냅샷을 모아 `cases_collected.json` 생성.
-- **라벨 방법론**: 상장 **+5분 매수** → 상장 직후 **+15분 시점 매도(고점 아님)** 수익률 → 대성공 ≥25% / 성공 10~25% / 보통 0~10% / 실패 -10~0% / 큰실패 ≤-10%. (`COLLECT_ENTRY_MIN`/`COLLECT_EXIT_MIN`로 조정)
-- 해외 서버라면 `.env`의 `HTTP_PROXY_URL`로 국내 프록시 주입. (서울 EC2면 보통 그대로 동작)
+- 현재 KRW 상장 코인 전체 → 각 **첫 캔들(상장 시점)** 에서 +5분 매수/+15분 매도 수익률 산출.
+- 공지 API가 열린 환경(국내 IP/프록시)이면 공지 기반도 가능: `python scripts/collect_cases.py`
+
+**라벨 방법론**: 상장 **+5분 매수** → **+15분 시점 매도(고점 아님)** 수익률 → 대성공 ≥25% / 성공 10~25% / 보통 0~10% / 실패 -10~0% / 큰실패 ≤-10%. (`COLLECT_ENTRY_MIN`/`COLLECT_EXIT_MIN`로 조정)
 
 **2) 백필** (오프라인 가능):
 ```bash
-python scripts/backfill_cases.py data/cases_collected.json
+python scripts/backfill_cases.py data/cases_upbit.json
 ```
 - 각 케이스를 **라이브와 동일한 피처 추출기**로 재구성 + 실현수익률→등급 라벨 → `cases` 저장.
 - 저장된 케이스는 다음 실행부터 등급 예측의 **2차 등급(최근접 이웃)** 에 자동 반영.
