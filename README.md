@@ -48,6 +48,7 @@ python scripts/run_detector.py
 - 기본은 `TELEGRAM_DRY_RUN=true`(전송 대신 로그), `LLM_ENABLED=false`.
 - 첫 실행은 기존 공지를 알림 없이 `seen` 처리(과거 공지 폭탄 방지).
 - AWS EC2 운영 시 **서울 리전(ap-northeast-2)** 권장. 차단되면 `HTTP_PROXY_URL`로 국내 프록시 주입.
+  - ⚠️ 업비트 공지 API는 **DC IP를 Cloudflare로 차단** → 집(가정용 KR IP) 프록시 필요. 셋업: [`docs/PROXY_SETUP.md`](docs/PROXY_SETUP.md)
 
 ### 상시 운영 (PM2 — 데몬)
 
