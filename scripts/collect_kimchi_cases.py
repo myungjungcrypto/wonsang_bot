@@ -87,7 +87,7 @@ def main() -> None:
                     log.info("스킵 %s: 업비트 KRW 캔들 없음", symbol)
                     continue
                 quote = overseas.quote(symbol, announce_ts + entry_offset)
-                usd_buy = quote.best_usd
+                usd_buy = quote.buy_price  # 유사가격 중 유동성 최대 거래소 가격
                 if usd_buy is None:
                     log.info("스킵 %s: 어느 CEX에도 없음(TGE 동시상장/DEX 전용 의심)", symbol)
                     continue
@@ -134,12 +134,15 @@ def main() -> None:
                     "krw_sell": krw_sell,
                     "usdt_krw": usdt_krw,
                     "gap_hours": round((listing_ts - announce_ts) / 3600, 2),
-                    "venues": quote.venues,            # 거래소→가격
+                    "buy_venue": quote.buy_venue,      # 매수처(유동성 최대)
+                    "price_spread": quote.price_spread,  # 거래소간 가격차(충돌 진단)
+                    "venues": quote.venues,            # name→{price,liq}
                     "venue_count": len(quote.venues),  # 가용성 피처
                 },
             })
-            log.info("케이스 %s: 매수$%.4f(%d개소) ret=%.1f%% %s (공지→상장 %.1fh)",
-                     symbol, usd_buy, len(quote.venues), ret,
+            log.info("케이스 %s: 매수$%.4f@%s(%d개소,스프레드%.0f%%) ret=%.1f%% %s (gap %.1fh)",
+                     symbol, usd_buy, quote.buy_venue, len(quote.venues),
+                     quote.price_spread * 100, ret,
                      "[KRW만추가]" if pre_listed else "[신규]",
                      (listing_ts - announce_ts) / 3600)
         if limit and len(cases) >= limit:

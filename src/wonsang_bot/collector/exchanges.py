@@ -1,13 +1,14 @@
-"""멀티 거래소 해외가 조회 + 가용성 집계.
+"""멀티 거래소 해외가 + 유동성 조회, 그리고 매수처 선택.
 
-따리 매수 후보 거래소(바이낸스/바이빗/OKX/MEXC/게이트/쿠코인/비트겟)의 특정 시점
-USDT 가격을 모두 조회 → 최저가(=매수 유리처) + 어느 거래소에 있었나(가용성 피처).
+매수가 기준(사용자 원칙): **가격이 비슷한 곳 중 유동성(거래대금)이 가장 큰 곳에서 매수**.
+미래 따리에서 실제로 할 행동과 동일하게 과거를 백필 → 성공확률이 현실적.
 
-- kline 파서는 거래소별 순수 함수(테스트). fetch 는 거래소별로 격리하고
-  **개별 실패는 무시**(graceful) → 일부 어댑터가 틀려도 나머지로 데이터 수집.
-- 어느 거래소에도 없으면(best=None) → 사전 물량 확보 불가(TGE 동시상장/ DEX 전용 의심).
+- 각 거래소 kline 에서 (종가, 호가통화 거래대금)을 뽑음. 파서는 순수 함수(테스트).
+- 가격 이상치(티커 충돌로 다른 토큰)는 중앙값 밴드 밖이라 제외됨.
+- fetch 는 거래소별 격리(개별 실패 무시).
 
-⚠️ 엔드포인트/심볼포맷/응답형식은 라이브에서 거래소별 재검증 필요.
+⚠️ 티커 충돌이 '비싼 토큰이 더 유동적'인 경우는 가격밴드로도 못 거를 수 있음
+   → 컨트랙트 기반 매칭/DEX 비교가 완전한 해법(로드맵).
 """
 from __future__ import annotations
 
@@ -17,50 +18,72 @@ from typing import Optional
 
 from ..config import Config
 from ..httpclient import HttpClient
-from .binance import parse_klines as _parse_binance  # [openTime_ms,o,h,l,c,...]
-from .returns import Series, _price_at
+from .returns import _price_at
 
 log = logging.getLogger(__name__)
 
-
-# ---------------- 거래소별 순수 파서 ----------------
-
-def parse_bybit(payload) -> Series:
-    rows = (payload or {}).get("result", {}).get("list", []) if isinstance(payload, dict) else []
-    return _idx(rows, 0, 4, ms=True)
+# (ts_sec, close, quote_volume)
+Series3 = list[tuple[float, float, float]]
 
 
-def parse_okx(payload) -> Series:
-    rows = (payload or {}).get("data", []) if isinstance(payload, dict) else []
-    return _idx(rows, 0, 4, ms=True)
-
-
-def parse_bitget(payload) -> Series:
-    rows = (payload or {}).get("data", []) if isinstance(payload, dict) else []
-    return _idx(rows, 0, 4, ms=True)
-
-
-def parse_gate(payload) -> Series:
-    # [ts_sec, quote_vol, close, high, low, open, ...]
-    rows = payload if isinstance(payload, list) else []
-    return _idx(rows, 0, 2, ms=False)
-
-
-def parse_kucoin(payload) -> Series:
-    # data: [[time_sec, open, close, high, low, volume, turnover], ...]
-    rows = (payload or {}).get("data", []) if isinstance(payload, dict) else []
-    return _idx(rows, 0, 2, ms=False)
-
-
-def _idx(rows, ts_i: int, close_i: int, ms: bool) -> Series:
-    out: Series = []
+def _rows3(rows, ts_i: int, close_i: int, qvol_i: int, ms: bool) -> Series3:
+    out: Series3 = []
     for r in rows or []:
         try:
             ts = float(r[ts_i]) / (1000.0 if ms else 1.0)
-            out.append((ts, float(r[close_i])))
+            out.append((ts, float(r[close_i]), float(r[qvol_i])))
         except (ValueError, TypeError, IndexError):
             continue
     return out
+
+
+# ---------------- 거래소별 순수 파서 (종가 + 호가통화 거래대금) ----------------
+
+def parse_binance(p):  # binance/mexc: [openMs,o,h,l,c,baseVol,closeMs,quoteVol,...]
+    return _rows3(p if isinstance(p, list) else [], 0, 4, 7, ms=True)
+
+
+def parse_bybit(p):    # result.list: [startMs,o,h,l,c,vol,turnover]
+    rows = (p or {}).get("result", {}).get("list", []) if isinstance(p, dict) else []
+    return _rows3(rows, 0, 4, 6, ms=True)
+
+
+def parse_okx(p):      # data: [ts,o,h,l,c,vol,volCcy,volCcyQuote,confirm]
+    rows = (p or {}).get("data", []) if isinstance(p, dict) else []
+    return _rows3(rows, 0, 4, 7, ms=True)
+
+
+def parse_gate(p):     # [ts, quoteVol, close, high, low, open, baseVol, ...]
+    return _rows3(p if isinstance(p, list) else [], 0, 2, 1, ms=False)
+
+
+def parse_kucoin(p):   # data: [time,open,close,high,low,vol,turnover]
+    rows = (p or {}).get("data", []) if isinstance(p, dict) else []
+    return _rows3(rows, 0, 2, 6, ms=False)
+
+
+def parse_bitget(p):   # data: [ts,o,h,l,c,baseVol,quoteVol,...]
+    rows = (p or {}).get("data", []) if isinstance(p, dict) else []
+    return _rows3(rows, 0, 4, 6, ms=True)
+
+
+# ---------------- 매수처 선택 (순수) ----------------
+
+def select_buy_venue(
+    venues: dict[str, dict], band: float = 0.12
+) -> tuple[Optional[float], Optional[str], float]:
+    """가격 비슷(중앙값 ±band)한 곳 중 유동성 최대 → (price, venue, price_spread)."""
+    items = [(n, d["price"], d.get("liq", 0.0)) for n, d in venues.items()
+             if d.get("price") and d["price"] > 0]
+    if not items:
+        return None, None, 0.0
+    prices = sorted(p for _, p, _ in items)
+    med = prices[len(prices) // 2]
+    spread = round(prices[-1] / prices[0] - 1.0, 3) if prices[0] > 0 else 0.0
+    similar = [t for t in items if med > 0 and abs(t[1] - med) / med <= band]
+    pool = similar or items
+    name, price, _ = max(pool, key=lambda t: t[2])  # 유동성 최대
+    return price, name, spread
 
 
 # ---------------- 거래소 provider ----------------
@@ -74,17 +97,26 @@ class _Exchange:
     def _url(self, symbol: str, start_ts: float, end_ts: float) -> str:  # pragma: no cover
         raise NotImplementedError
 
-    def _parse(self, payload) -> Series:  # pragma: no cover
+    def _parse(self, payload) -> Series3:  # pragma: no cover
         raise NotImplementedError
 
-    def price_at(self, symbol: str, ts: float, pad_sec: float = 900) -> Optional[float]:
+    def quote_at(
+        self, symbol: str, ts: float, pad_sec: float = 900
+    ) -> Optional[tuple[float, float]]:
+        """(가격, 유동성=윈도 거래대금합). 실패 시 None."""
         try:
             payload = self.http.get_json(self._url(symbol, ts - 60, ts + pad_sec))
-            hit = _price_at(sorted(self._parse(payload)), ts)
-            return hit[1] if hit else None
-        except Exception:  # noqa: BLE001 - 거래소별 실패 격리
-            log.debug("%s price_at 실패 %s", self.name, symbol, exc_info=True)
+            s = sorted(self._parse(payload))
+        except Exception:  # noqa: BLE001 - 거래소별 격리
+            log.debug("%s quote_at 실패 %s", self.name, symbol, exc_info=True)
             return None
+        if not s:
+            return None
+        hit = _price_at([(t, c) for t, c, _ in s], ts)
+        if hit is None or hit[1] <= 0:
+            return None
+        liq = sum(qv for _, _, qv in s)
+        return hit[1], liq
 
 
 class Binance(_Exchange):
@@ -96,7 +128,7 @@ class Binance(_Exchange):
                 f"&startTime={int(a*1000)}&endTime={int(b*1000)}&limit=1000")
 
     def _parse(self, p):
-        return _parse_binance(p if isinstance(p, list) else [])
+        return parse_binance(p)
 
 
 class Mexc(_Exchange):
@@ -108,7 +140,7 @@ class Mexc(_Exchange):
                 f"&startTime={int(a*1000)}&endTime={int(b*1000)}&limit=1000")
 
     def _parse(self, p):
-        return _parse_binance(p if isinstance(p, list) else [])
+        return parse_binance(p)
 
 
 class Bybit(_Exchange):
@@ -174,8 +206,10 @@ _EXCHANGE_CLASSES = [Binance, Bybit, Okx, Mexc, Gate, Kucoin, Bitget]
 
 @dataclass(slots=True)
 class Quote:
-    best_usd: Optional[float]                 # 최저 매수가(=유리처)
-    venues: dict[str, float] = field(default_factory=dict)  # 거래소→가격
+    buy_price: Optional[float]                 # 매수가(유사가격 중 유동성 최대)
+    buy_venue: Optional[str]
+    price_spread: float = 0.0                  # 최고/최저 가격차(충돌 진단용)
+    venues: dict[str, dict] = field(default_factory=dict)  # name→{price,liq}
 
 
 class OverseasAggregator:
@@ -183,17 +217,16 @@ class OverseasAggregator:
         self.exchanges = exchanges
 
     def quote(self, symbol: str, ts: float, pad_sec: float = 900) -> Quote:
-        venues: dict[str, float] = {}
+        venues: dict[str, dict] = {}
         for ex in self.exchanges:
-            px = ex.price_at(symbol, ts, pad_sec)
-            if px and px > 0:
-                venues[ex.name] = px
-        best = min(venues.values()) if venues else None
-        return Quote(best_usd=best, venues=venues)
+            q = ex.quote_at(symbol, ts, pad_sec)
+            if q:
+                venues[ex.name] = {"price": round(q[0], 8), "liq": round(q[1], 2)}
+        price, venue, spread = select_buy_venue(venues)
+        return Quote(buy_price=price, buy_venue=venue, price_spread=spread, venues=venues)
 
 
 def build_overseas_aggregator(config: Config) -> OverseasAggregator:
-    """거래소별 독립 client(레이트리밋 throttle)로 집계기 구성."""
     exchanges = [
         cls(HttpClient(timeout=config.http_timeout_sec, proxy=None,
                        user_agent=config.request_user_agent,
