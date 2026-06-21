@@ -43,19 +43,24 @@ def main() -> None:
     out_path = sys.argv[1] if len(sys.argv) > 1 else "data/cases_kimchi.json"
     pages = int(os.environ.get("COLLECT_PAGES", "40"))
     entry_offset = float(os.environ.get("COLLECT_ENTRY_MIN", "5")) * 60
-    sleep_s = float(os.environ.get("COLLECT_SLEEP", "0.25"))
+    sleep_s = float(os.environ.get("COLLECT_SLEEP", "0"))  # throttle 가 페이싱 담당
     limit = int(os.environ.get("COLLECT_LIMIT", "0"))
 
     config = Config.load()
     setup_logging(config.log_level)
 
-    # 공지: 프록시(Cloudflare 우회), 그 외: 직접
+    # 공지: 프록시(Cloudflare 우회). 업비트/바이낸스: 직접 + 레이트리밋 throttle.
     http_proxy = HttpClient(timeout=config.http_timeout_sec, proxy=config.http_proxy,
                             user_agent=config.request_user_agent)
-    http_direct = HttpClient(timeout=config.http_timeout_sec, proxy=None,
-                             user_agent=config.request_user_agent)
-    upbit = UpbitMarketBackfiller(http_direct)
-    binance = BinancePriceProvider(http_direct)
+    # 업비트 quotation 한도 ~10req/s → 0.2s 간격(5req/s) + 429 백오프
+    http_upbit = HttpClient(timeout=config.http_timeout_sec, proxy=None,
+                            user_agent=config.request_user_agent,
+                            min_interval=0.2, max_retries=5)
+    http_binance = HttpClient(timeout=config.http_timeout_sec, proxy=None,
+                              user_agent=config.request_user_agent,
+                              min_interval=0.1, max_retries=3)
+    upbit = UpbitMarketBackfiller(http_upbit)
+    binance = BinancePriceProvider(http_binance)
 
     anns = fetch_upbit_archive(http_proxy, config.upbit_announcements_url, pages=pages)
     log.info("공지 아카이브 %d건 수신 (pages=%d)", len(anns), pages)

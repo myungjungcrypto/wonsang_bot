@@ -216,6 +216,18 @@
   - 등급: **대성공 ≥25% / 성공 10~25% / 보통 0~10% / 실패 -10~0% / 큰실패 ≤-10%** (`labeling.py`).
   - 진입/매도 시점은 `COLLECT_ENTRY_MIN`/`COLLECT_EXIT_MIN`(분)로 조정.
   - **업비트 중심(중요도 90):** 업비트 분봉(`/v1/candles`, `to`로 과거 백필 OK)이 주 소스. 빗썸(10)은 공개 candlestick이 최근 구간만 → 과거 깊이 한계(추후 보강).
+
+### 구현 메모 (김프 백필 — `collect_kimchi_cases.py`, 2026-06-21 확정)
+- **모델:** 공지 +5분 **해외 USDT 매수** → 업비트 **상장 첫 체결가(KRW) 매도**. gap은 고정 아님(`first_candle`이 실제 상장시각 자동 탐지). 환율=업비트 KRW-USDT.
+- **레이트리밋:** 업비트 quotation 10req/s → `HttpClient(min_interval, max_retries)`로 throttle+429 백오프. 거래소별 client 분리.
+
+### 로드맵 (백필 피처 엔지니어링 — 멀티거래소/DEX/TGE) ⏳
+사용자 요구(2026-06-21). 단계적 구현 예정 — 먼저 Binance로 모델 검증 후 확장:
+1. **멀티 CEX 해외가:** Binance + Bybit + OKX + MEXC + Gate + KuCoin + Bitget 의 공지+5분 가격을 모두 조회 → 최저/대표 매수가. 거래소별 kline 어댑터(파서 순수 테스트, fetch 격리).
+2. **거래소 가용성 피처:** 코인이 **몇 개 / 어느 CEX**에 있었나 → "적은 거래소에만 있을수록 갭↑" 가설을 데이터로 검증/가중치화.
+3. **DEX-only 케이스:** CEX 어디에도 없고 DEX만 있으면 DEX 매수가(Geckoterminal/Dexscreener 등)로 계산 → "DEX만 = 더 유리" 가설 도출.
+4. **TGE-동시상장 예외:** TGE 전 코인이 TGE와 동시 상장 → 사전 물량 확보 불가 → **메인 따리에서 skip + 별도 플래그**. 그리고 **TGE가 vs 상장가** 비교로 이 부류의 성공/실패 패턴을 따로 학습.
+5. 위 결과를 predictor 피처(`supply_distribution`/신규 `venue_availability`/`source_type`)와 가중치로 환류.
 - ⚠️ **지역차단:** 업비트/빗썸 공지·캔들은 해외/DC IP 차단이 잦음 → 서울 EC2 또는 `HTTP_PROXY_URL`(국내 프록시). 코인게코는 글로벌이라 보통 무관.
 - 순수 로직(수익률·진입오프셋·페이지네이션·캔들파서·조립)은 오프라인 단위테스트(92개 통과), 네트워크부는 격리.
 
