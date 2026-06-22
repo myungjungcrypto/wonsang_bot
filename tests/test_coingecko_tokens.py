@@ -3,10 +3,13 @@ import unittest
 from wonsang_bot.collector.coingecko import (
     CHAIN_TO_CG_PLATFORM,
     CoinGeckoTokens,
+    make_market_provider,
+    parse_market_cap,
     parse_platforms,
     parse_symbol,
     parse_ticker_exchanges,
 )
+from wonsang_bot.core.events import Contract, ListingDetected
 
 
 class _FakeHttp:
@@ -115,6 +118,40 @@ class TestTickerExchanges(unittest.TestCase):
         cg = CoinGeckoTokens(_Cfg(), http)
         self.assertEqual(cg.exchanges_for("usds"), {"binance"})
         self.assertEqual(cg.exchanges_for(None), set())
+
+
+class TestMarketCap(unittest.TestCase):
+    def test_parse_market_cap(self):
+        self.assertEqual(
+            parse_market_cap({"market_data": {"market_cap": {"usd": 1234.5}}}), 1234.5)
+        self.assertIsNone(parse_market_cap({}))
+        self.assertIsNone(parse_market_cap({"market_data": {"market_cap": {}}}))
+
+    def test_resolve_includes_market_cap(self):
+        http = _FakeHttp({"0xX": {"id": "x", "symbol": "X",
+                                  "market_data": {"market_cap": {"usd": 5_000_000}}}})
+        cg = CoinGeckoTokens(_Cfg(), http)
+        self.assertEqual(cg.resolve("ethereum", "0xX").market_cap_usd, 5_000_000)
+
+    def test_market_provider_uses_first_valid_contract(self):
+        http = _FakeHttp({
+            "0xA": {"id": "a", "symbol": "A"},  # 시총 없음 → 스킵
+            "0xB": {"id": "b", "symbol": "B",
+                    "market_data": {"market_cap": {"usd": 9_000_000}}},
+        })
+        provider = make_market_provider(CoinGeckoTokens(_Cfg(), http))
+        listing = ListingDetected(
+            source="upbit", announcement_id="1", title="t", symbols=["B"], is_krw=True,
+            contracts=[Contract(chain="ethereum", address="0xA"),
+                       Contract(chain="ethereum", address="0xB")],
+        )
+        self.assertEqual(provider(listing), {"market_cap_usd": 9_000_000})
+
+    def test_market_provider_none_when_no_contracts(self):
+        provider = make_market_provider(CoinGeckoTokens(_Cfg(), _FakeHttp({})))
+        listing = ListingDetected(source="upbit", announcement_id="1", title="t",
+                                  symbols=["X"], is_krw=True)
+        self.assertIsNone(provider(listing))
 
 
 if __name__ == "__main__":

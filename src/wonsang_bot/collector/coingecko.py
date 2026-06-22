@@ -66,6 +66,17 @@ def parse_coin_id(payload) -> str | None:
     return cid if isinstance(cid, str) and cid else None
 
 
+def parse_market_cap(payload) -> float | None:
+    """CoinGecko 코인 응답 → 시총 USD. 없으면 None."""
+    md = (payload or {}).get("market_data", {}) if isinstance(payload, dict) else {}
+    mc = (md or {}).get("market_cap", {}) if isinstance(md, dict) else {}
+    usd = (mc or {}).get("usd") if isinstance(mc, dict) else None
+    try:
+        return float(usd) if usd is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_ticker_exchanges(payload) -> set[str]:
     """/coins/{id}/tickers 응답 → 이 코인을 상장한 '우리 거래소' 집합.
 
@@ -89,6 +100,7 @@ class ResolvedToken:
     platforms: dict[str, str] = field(default_factory=dict)  # {chain: address} 전체
     coin_id: str | None = None               # 코인게코 coin id
     exchanges: set[str] = field(default_factory=set)  # 이 코인을 상장한 우리 거래소
+    market_cap_usd: float | None = None      # 유통 시총(USD)
 
 
 class CoinGeckoTokens:
@@ -126,7 +138,7 @@ class CoinGeckoTokens:
         plats = parse_platforms(data)
         plats.setdefault(chain, address)  # 원본 체인도 포함 보장
         return ResolvedToken(parse_symbol(data), plats, parse_coin_id(data),
-                             parse_ticker_exchanges(data))
+                             parse_ticker_exchanges(data), parse_market_cap(data))
 
     def platforms_for(self, chain: str, address: str) -> dict[str, str]:
         """(chain, address) → 같은 코인의 {chain: address} 전체. 실패 시 원본만."""
@@ -147,3 +159,17 @@ class CoinGeckoTokens:
             log.debug("CoinGecko 티커 조회 실패 %s", coin_id, exc_info=True)
             return set()
         return parse_ticker_exchanges(data)
+
+
+def make_market_provider(cg: "CoinGeckoTokens"):
+    """라이브 등급예측용 시총 provider — 공지 컨트랙트로 CoinGecko 시총 조회.
+
+    반환: Callable[[ListingDetected], dict|None]. 컨트랙트가 여러 개면 첫 유효 시총.
+    """
+    def provider(listing) -> dict | None:
+        for c in getattr(listing, "contracts", []) or []:
+            r = cg.resolve(c.chain, c.address)
+            if r.market_cap_usd is not None:
+                return {"market_cap_usd": r.market_cap_usd}
+        return None
+    return provider

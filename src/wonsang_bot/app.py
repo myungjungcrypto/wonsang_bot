@@ -7,6 +7,7 @@ import logging
 from .config import Config
 from .core.bus import EventBus
 from .core.events import GradePredicted, ListingDetected
+from .collector.coingecko import CoinGeckoTokens, make_market_provider
 from .collector.exchanges import binance_pre_listed
 from .detector.service import DetectorService
 from .detector.sources.bithumb import BithumbSource, bithumb_pre_listed
@@ -44,11 +45,21 @@ def build_service(config: Config) -> DetectorService:
 
     if config.predictor_enabled:
         historical = HistoricalStore.from_dicts(storage.load_cases())
+        # 시총 provider: CoinGecko(키 있으면 데모/프로 헤더 자동). 미연결이면 marketcap 비활성.
+        market_provider = None
+        if config.coingecko_enabled:
+            cg_http = HttpClient(
+                timeout=config.http_timeout_sec, proxy=None,
+                user_agent=config.request_user_agent, min_interval=2.0, max_retries=2,
+            )
+            market_provider = make_market_provider(CoinGeckoTokens(config, cg_http))
         PredictorService(
-            config, storage, bus, build_extractors(config), historical=historical
+            config, storage, bus, build_extractors(config), historical=historical,
+            market_provider=market_provider,
         )
         bus.subscribe(GradePredicted, notifier.on_grade)
-        log.info("등급 예측: ON (과거 케이스 %d건)", len(historical.cases))
+        log.info("등급 예측: ON (과거 케이스 %d건, 시총=%s)",
+                 len(historical.cases), "ON" if market_provider else "OFF")
 
     sources = []
     if config.upbit_enabled:
