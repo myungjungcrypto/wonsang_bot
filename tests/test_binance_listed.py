@@ -16,11 +16,12 @@ def _ctx(pre):
 
 
 class TestBinanceListedFeature(unittest.TestCase):
-    def test_on_binance_lower_than_not(self):
+    def test_on_binance_higher_than_not(self):
+        # 데이터상 바이낸스 선상장이 더 좋음(수익↑·안전) → 높은 점수
         on = BinanceListedFeature(1.0).extract(_ctx(True))
         off = BinanceListedFeature(1.0).extract(_ctx(False))
         self.assertTrue(on.available and off.available)
-        self.assertLess(on.score, off.score)
+        self.assertGreater(on.score, off.score)
 
     def test_unknown_unavailable(self):
         self.assertFalse(BinanceListedFeature(1.0).extract(_ctx(None)).available)

@@ -1,15 +1,16 @@
 """바이낸스 선상장 여부 점수 (사용자 추가 기준).
 
-가설: 상장 시점 이미 **바이낸스(USDT)** 에 있던 코인은 글로벌 유동성·인지도가 이미 커서
-업비트 신규상장의 따리 프리미엄이 덜 폭발할 수 있음(약한 음의 신호). 반대로 바이낸스에도
-없던 코인은 첫 메이저 진입이라 갭 여지. (단, 메이저 상장 = 검증된 코인이라 오히려 안전할
-가능성도 — listing_type/빗썸처럼 직관이 데이터와 반대일 수 있어 약한 가중으로 시작.)
-
-⚠️ 백필 데이터로 검증 전 → 약한 lean + 낮은 가중. analysis 의 by_binance 로 캘리브레이션.
+가설(원래): 바이낸스에 이미 있으면 프리미엄 약화 → 낮은 점수.
+→ **백필 50건으로 검증한 결과 반대(강한 신호)**:
+  바이낸스 선상장  중앙값 +9.7% / 실패율 16% / 승률 84%
+  바이낸스 미상장  중앙값 +3.8% / 실패율 24% / 승률 76%
+즉 바이낸스 선상장 = '검증된 좋은 코인'이라 수익↑ + 안전(venue_count 와 같은 품질 신호).
+→ 방향을 **양(선상장=높음)** 으로 바꾸고 가중을 올린다.
+(n=25/25 로 비교적 깔끔. venue_count 와 상관 있으니 가중은 그보다는 낮게.)
 
 listing.pre_listed_binance:
-  True  → 바이낸스 선상장 → 약간 낮음
-  False → 바이낸스 미상장 → 약간 높음
+  True  → 바이낸스 선상장 → 높음(품질·수요 검증)
+  False → 바이낸스 미상장 → 낮음(상대적으로 무명·위험)
   None  → 미상 → available=False (가중합 제외)
 """
 from __future__ import annotations
@@ -17,8 +18,9 @@ from __future__ import annotations
 from ...core.events import FeatureScore
 from .base import FeatureContext, FeatureExtractor
 
-SCORE_ON_BINANCE = 0.45      # 바이낸스 선상장 — 프리미엄 덜할 수 있음(가설)
-SCORE_NOT_ON_BINANCE = 0.55  # 바이낸스 미상장 — 첫 메이저 진입
+# 데이터 캘리브레이션: 선상장(중앙 +9.7%/실패16%)=성공경향, 미상장(+3.8%/실패24%)=경계.
+SCORE_ON_BINANCE = 0.7
+SCORE_NOT_ON_BINANCE = 0.4
 
 
 class BinanceListedFeature(FeatureExtractor):
@@ -34,9 +36,10 @@ class BinanceListedFeature(FeatureExtractor):
         if pre:
             return FeatureScore(
                 name=self.name, score=SCORE_ON_BINANCE, weight=self.weight,
-                available=True, detail="바이낸스 선상장(글로벌 인지 기존) — 프리미엄 약화 가설",
+                available=True, detail="바이낸스 선상장(검증된 코인) — 수익↑·안전(데이터)",
             )
         return FeatureScore(
             name=self.name, score=SCORE_NOT_ON_BINANCE, weight=self.weight,
-            available=True, detail="바이낸스 미상장 — 첫 메이저 진입(갭 여지)",
+            available=True, detail="바이낸스 미상장 — 상대적 무명·위험(데이터)",
         )
+
