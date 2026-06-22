@@ -2,6 +2,7 @@ import unittest
 
 from wonsang_bot.collector.exchanges import (
     OverseasAggregator,
+    consensus_price,
     parse_binance,
     parse_bitget,
     parse_bybit,
@@ -65,6 +66,35 @@ class TestSelectBuyVenue(unittest.TestCase):
 
     def test_empty(self):
         self.assertEqual(select_buy_venue({}), (None, None, 0.0))
+
+
+class TestConsensusPrice(unittest.TestCase):
+    def test_stablecoin_cluster_ignores_outlier(self):
+        # CEX 3곳이 ~$1 합의, 충돌 1곳($0.5)은 군집 밖 → 합의가 ~$1
+        venues = {
+            "binance": {"price": 1.00, "liq": 8000},
+            "bybit": {"price": 1.01, "liq": 4000},
+            "okx": {"price": 0.99, "liq": 2000},
+            "mexc": {"price": 0.50, "liq": 9999},   # 다른 USDS(충돌)
+        }
+        self.assertAlmostEqual(consensus_price(venues), 1.0, places=1)
+
+    def test_thin_single_venue_none(self):
+        self.assertIsNone(consensus_price({"kucoin": {"price": 0.1, "liq": 500}}))
+
+    def test_scattered_no_consensus_none(self):
+        # 2곳뿐인데 서로 멀어 군집(≥2) 안 생김 → None
+        venues = {"a": {"price": 0.06, "liq": 100}, "b": {"price": 1.0, "liq": 100}}
+        self.assertIsNone(consensus_price(venues))
+
+    def test_guard_keeps_cex_when_dex_anchor_wrong(self):
+        # USDS 재현: CEX 합의 $1, 엉뚱한 DEX $0.0785. 합의를 anchor 로 쓰면 DEX 제외.
+        cex = {"binance": {"price": 1.0, "liq": 8000}, "bybit": {"price": 1.0, "liq": 4000}}
+        anchor = consensus_price(cex)
+        venues = dict(cex, dex={"price": 0.0785, "liq": 50000})
+        price, venue, _ = select_buy_venue(venues, anchor_price=anchor)
+        self.assertNotEqual(venue, "dex")
+        self.assertAlmostEqual(price, 1.0)
 
 
 class _FakeEx:

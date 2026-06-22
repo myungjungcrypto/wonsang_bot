@@ -69,6 +69,38 @@ def parse_bitget(p):   # data: [ts,o,h,l,c,baseVol,quoteVol,...]
 
 # ---------------- 매수처 선택 (순수) ----------------
 
+def consensus_price(
+    venues: dict[str, dict], band: float = 0.12, min_cluster: int = 2
+) -> Optional[float]:
+    """다수 거래소가 좁은 밴드(±band)로 합의한 가격(군집 대표값). 합의 없으면 None.
+
+    각 가격을 중심으로 ±band 안에 드는 거래소를 세어 가장 큰 군집을 고르고,
+    그 군집이 min_cluster 곳 이상이면 **유동성 가중** 대표가를 돌려준다.
+    스테이블코인·정상상장은 합의가 생기고(→ 그 가격 신뢰), 시세가 얇거나(<2곳)
+    흩어졌으면 None(→ 호출부가 DEX 등 다른 기준을 쓰게).
+
+    용도: 교차체인 DEX가 엉뚱한 풀에서 이상가를 가져와도, CEX 합의가 있으면
+    그걸 anchor 로 삼아 정상 CEX 들이 밴드 밖으로 버려지는 사고를 막는다.
+    """
+    items = [(d["price"], d.get("liq", 0.0) or 0.0) for d in venues.values()
+             if d.get("price") and d["price"] > 0]
+    if len(items) < min_cluster:
+        return None
+    best: list[tuple[float, float]] = []
+    for center, _ in items:
+        cluster = [t for t in items if abs(t[0] - center) / center <= band]
+        if (len(cluster) > len(best)
+                or (len(cluster) == len(best)
+                    and sum(l for _, l in cluster) > sum(l for _, l in best))):
+            best = cluster
+    if len(best) < min_cluster:
+        return None
+    liq_sum = sum(l for _, l in best)
+    if liq_sum > 0:
+        return sum(p * l for p, l in best) / liq_sum          # 유동성 가중 합의가
+    return sorted(p for p, _ in best)[len(best) // 2]          # 유동성 0이면 중앙값
+
+
 def select_buy_venue(
     venues: dict[str, dict], band: float = 0.12, anchor_price: Optional[float] = None
 ) -> tuple[Optional[float], Optional[str], float]:

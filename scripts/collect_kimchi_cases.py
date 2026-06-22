@@ -32,6 +32,7 @@ from wonsang_bot.collector.dex import GeckoTerminalDEX  # noqa: E402
 from wonsang_bot.collector.exchanges import (  # noqa: E402
     Quote,
     build_overseas_aggregator,
+    consensus_price,
     select_buy_venue,
 )
 from wonsang_bot.collector.kimchi import kimchi_return_pct  # noqa: E402
@@ -134,12 +135,15 @@ def main() -> None:
                         dq = dex.quote_at(ch, ad, announce_ts + entry_offset)
                         if dq and dq[1] >= dex_min_liq and (best is None or dq[1] > best[1]):
                             best = dq
-                    if best:  # 실매수 가능 유동성(>=min_liq) 풀의 가격만 anchor 로
+                    if best:  # 실매수 가능 유동성(>=min_liq) 풀
                         venues = dict(quote.venues)
                         venues["dex"] = {"price": round(best[0], 8), "liq": round(best[1], 2)}
-                        p, v, sp = select_buy_venue(venues, anchor_price=best[0])
+                        # CEX 합의(≥2곳 군집)가 있으면 그걸 anchor → DEX 가 엉뚱해도 무시
+                        # (USDS 같은 스테이블 보호). 없으면(얇음/흩어짐) DEX anchor(IRYS: 진짜 풀).
+                        anchor = consensus_price(quote.venues) or best[0]
+                        p, v, sp = select_buy_venue(venues, anchor_price=anchor)
                         quote = Quote(buy_price=p, buy_venue=v, price_spread=sp, venues=venues)
-                        used_dex = True
+                        used_dex = (v == "dex")
                 usd_buy = quote.buy_price  # 기준가 근처 중 유동성 최대(CEX+DEX)
                 if usd_buy is None:
                     log.info("스킵 %s: CEX·DEX 어디에도 없음(TGE 동시상장 의심)", symbol)
