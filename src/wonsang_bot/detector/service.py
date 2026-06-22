@@ -79,8 +79,10 @@ class DetectorService:
         for src in self.sources:
             try:
                 fetched = await asyncio.to_thread(src.fetch)
-            except Exception:  # noqa: BLE001
-                log.exception("fetch 실패: %s", src.name)
+            except Exception as exc:  # noqa: BLE001 - 소스 실패 격리(프록시 끊김 등)
+                # 0.5s 폴링이라 풀 트레이스백은 과함 → 한 줄 경고(상세는 DEBUG)
+                log.warning("fetch 실패: %s — %s", src.name, exc)
+                log.debug("fetch 실패 상세 %s", src.name, exc_info=True)
                 continue
             for ann in find_new(fetched, seen):
                 self.storage.mark_seen(ann)
