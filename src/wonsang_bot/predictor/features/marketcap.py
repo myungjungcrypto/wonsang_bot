@@ -1,16 +1,19 @@
-"""유통 시총 점수 — 작을수록 펌핑 여지가 커 갭 유리.
+"""유통 시총(MC) 점수 — 클수록 따리 펌핑 여지 작음.
 
-데이터는 주입형 provider(예: CoinGecko/CMC + 온체인 유통량)에서 받는다.
-provider가 없거나 값을 못 주면 available=False(오프라인 환경에서 우아하게 비활성).
+백필 50건(상장일 CoinGecko MC, 구간별 중앙값):
+  $10-100M +8.6% / $100M-1B +8.5% / >$1B +0.8%(거의 본전)  (미상=초기/무데이터 +4.3%)
+→ "작을수록 좋다"는 약하고($10M~1B 차이 거의 없음), **실질 분기점은 ~$1B**(대형주는
+  이미 글로벌 가격 형성 → 안 터짐). ramp 중심을 $1B 근처로(≤$500M 최고, $1.5B↑ 0).
+FDV(완전희석)가 신규상장엔 더 맞을 수 있으나 일단 MC 기준(추후 확장).
 """
 from __future__ import annotations
 
 from ...core.events import FeatureScore
 from .base import FeatureContext, FeatureExtractor, score_lower_better
 
-# 시총 점수 구간(USD): 이 이하면 1점, 이상이면 0점 — 라이브 캘리브레이션 대상
-MC_GOOD_BELOW = 2_000_000      # 200만달러 이하 → 초소형, 펌핑 여지 큼
-MC_BAD_ABOVE = 500_000_000     # 5억달러 이상 → 펌핑 여지 작음
+# 데이터 캘리브레이션: ≤$500M 펌핑여지 충분, $1.5B↑ 사실상 없음(분기 ~$1B).
+MC_GOOD_BELOW = 500_000_000
+MC_BAD_ABOVE = 1_500_000_000
 
 
 def score_marketcap(mc_usd: float) -> float:

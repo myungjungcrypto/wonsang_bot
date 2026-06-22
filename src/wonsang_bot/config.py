@@ -120,7 +120,7 @@ class Config:
     w_venue_count: float = 3.0      # 거래소 가용성 — 백필상 가장 깨끗한 신호(최고 가중)
     w_bithumb_listed: float = 1.0   # 빗썸 기상장(검증 전, 약한 가중 → 데이터로 캘리브레이션)
     w_binance_listed: float = 2.0   # 바이낸스 기상장 — 데이터상 강한 품질신호(방향 양)
-    w_marketcap: float = 2.5
+    w_marketcap: float = 1.5        # 시총(MC) — 데이터상 ~$1B 분기만 분별(약신호) → 하향
     w_social: float = 1.0
     historical_k: int = 3
     # 내러티브 heat(canonical→0..1). 비우면 narrative 모듈 기본값 사용.
@@ -175,7 +175,7 @@ class Config:
             w_venue_count=_get_float("W_VENUE_COUNT", 3.0),
             w_bithumb_listed=_get_float("W_BITHUMB_LISTED", 1.0),
             w_binance_listed=_get_float("W_BINANCE_LISTED", 2.0),
-            w_marketcap=_get_float("W_MARKETCAP", 2.5),
+            w_marketcap=_get_float("W_MARKETCAP", 1.5),
             w_social=_get_float("W_SOCIAL", 1.0),
             historical_k=_get_int("HISTORICAL_K", 3),
             hot_narratives=_get_json("HOT_NARRATIVES", {}),

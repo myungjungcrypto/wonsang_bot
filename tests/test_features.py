@@ -79,8 +79,9 @@ class TestMarketCap(unittest.TestCase):
         self.assertAlmostEqual(MarketCapFeature(1.0).extract(ctx).score, 1.0)
 
     def test_score_bounds(self):
-        self.assertAlmostEqual(score_marketcap(2_000_000), 1.0)
-        self.assertAlmostEqual(score_marketcap(500_000_000), 0.0)
+        self.assertAlmostEqual(score_marketcap(500_000_000), 1.0)    # ≤$500M 최고
+        self.assertAlmostEqual(score_marketcap(1_500_000_000), 0.0)  # $1.5B↑ 0
+        self.assertGreater(score_marketcap(50_000_000), 0.9)         # 중소형 높음
 
 
 class TestSocial(unittest.TestCase):
