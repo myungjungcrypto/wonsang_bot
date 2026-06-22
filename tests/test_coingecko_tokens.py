@@ -159,6 +159,16 @@ class TestMarketCap(unittest.TestCase):
                                   symbols=["X"], is_krw=True)
         self.assertIsNone(provider(listing))
 
+    def test_market_provider_rejects_symbol_mismatch(self):
+        # IRYS 공지에 USDS 컨트랙트 → USDS 시총을 IRYS 로 쓰면 안 됨 → None
+        http = _FakeHttp({"0xUSDS": {"id": "usds", "symbol": "USDS",
+                                     "market_data": {"market_cap": {"usd": 10_000_000_000}}}})
+        provider = make_market_provider(CoinGeckoTokens(_Cfg(), http))
+        listing = ListingDetected(
+            source="upbit", announcement_id="1", title="t", symbols=["IRYS"], is_krw=True,
+            contracts=[Contract(chain="ethereum", address="0xUSDS")])
+        self.assertIsNone(provider(listing))
+
 
 if __name__ == "__main__":
     unittest.main()

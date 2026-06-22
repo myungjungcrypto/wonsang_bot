@@ -170,6 +170,12 @@ class Storage:
                 ),
             )
 
+    def clear_cases(self) -> int:
+        """cases 테이블 비우기(클린 재빌드용). 삭제된 행 수 반환."""
+        with self._lock, self._conn:
+            cur = self._conn.execute("DELETE FROM cases")
+        return cur.rowcount
+
     def load_cases(self) -> list[dict]:
         with self._lock:
             cur = self._conn.execute("SELECT id, symbol, grade, features, meta FROM cases")

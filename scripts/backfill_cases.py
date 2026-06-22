@@ -2,8 +2,9 @@
 """과거 케이스 백필 실행.
 
 사용:
-    python scripts/backfill_cases.py [입력.json]
+    python scripts/backfill_cases.py [입력.json] [--reset]
     (기본 입력: data/cases_seed.example.json)
+    --reset: 백필 전에 cases 테이블을 비움(옛 등급 라벨 등 잔재 제거, 클린 재빌드).
 
 입력 JSON의 각 케이스를 라이브와 동일한 피처 추출기로 재구성하고, 실현 수익률을
 등급으로 라벨링하여 DB(cases)에 저장한다. 저장된 케이스는 다음 실행부터 등급
@@ -22,13 +23,18 @@ from wonsang_bot.storage.db import Storage  # noqa: E402
 
 
 def main() -> None:
-    path = sys.argv[1] if len(sys.argv) > 1 else "data/cases_seed.example.json"
+    args = [a for a in sys.argv[1:] if a != "--reset"]
+    reset = "--reset" in sys.argv[1:]
+    path = args[0] if args else "data/cases_seed.example.json"
     config = Config.load()
     setup_logging(config.log_level)
 
     raws = load_raw_cases(path)
     storage = Storage(config.db_path)
     try:
+        if reset:
+            removed = storage.clear_cases()
+            print(f"cases 초기화: {removed}건 삭제(클린 재빌드)")
         n = backfill(raws, build_extractors(config), storage, config=config)
     finally:
         total = len(storage.load_cases())

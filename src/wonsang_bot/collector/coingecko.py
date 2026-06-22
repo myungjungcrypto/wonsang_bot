@@ -183,12 +183,18 @@ class CoinGeckoTokens:
 def make_market_provider(cg: "CoinGeckoTokens"):
     """라이브 등급예측용 시총 provider — 공지 컨트랙트로 CoinGecko 시총 조회.
 
-    반환: Callable[[ListingDetected], dict|None]. 컨트랙트가 여러 개면 첫 유효 시총.
+    반환: Callable[[ListingDetected], dict|None]. 본문에 여러 토큰 주소가 섞일 수 있어
+    **상장 심볼과 일치하는 컨트랙트의 시총만** 사용(불일치 컨트랙트의 시총 오용 방지).
     """
     def provider(listing) -> dict | None:
+        syms = getattr(listing, "symbols", None) or []
+        target = syms[0].lower() if syms else None
         for c in getattr(listing, "contracts", []) or []:
             r = cg.resolve(c.chain, c.address)
-            if r.market_cap_usd is not None:
-                return {"market_cap_usd": r.market_cap_usd}
+            if r.market_cap_usd is None:
+                continue
+            if target and r.symbol and r.symbol != target:
+                continue  # 다른 토큰(예: IRYS 공지에 USDS 주소) → 그 시총 쓰면 안 됨
+            return {"market_cap_usd": r.market_cap_usd}
         return None
     return provider

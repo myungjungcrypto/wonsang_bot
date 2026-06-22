@@ -40,6 +40,14 @@ class TestStorage(unittest.TestCase):
         # 중복 저장(REPLACE)도 에러 없이 동작
         self.s.save_listing(ev)
 
+    def test_clear_cases(self):
+        self.s.add_case({"id": "a", "symbol": "A", "grade": "보통", "features": {}})
+        self.s.add_case({"id": "b", "symbol": "B", "grade": "성공", "features": {}})
+        self.assertEqual(len(self.s.load_cases()), 2)
+        removed = self.s.clear_cases()
+        self.assertEqual(removed, 2)
+        self.assertEqual(self.s.load_cases(), [])
+
 
 if __name__ == "__main__":
     unittest.main()
