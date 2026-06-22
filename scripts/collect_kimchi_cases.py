@@ -9,9 +9,15 @@
 - 업비트 캔들(api.upbit.com)·바이낸스: 차단 없음 → **직접**
 
 사용:
-    python scripts/collect_kimchi_cases.py [출력.json]
-    # 옵션: COLLECT_PAGES=40 COLLECT_ENTRY_MIN=5 COLLECT_SLEEP=0.25 COLLECT_LIMIT=0
-    # COLLECT_LIMIT>0 이면 KRW 상장 앞 N개만(빠른 테스트)
+    # 최근 50개만(빠름, 분석도 보통 최근 50건 기준):
+    COLLECT_LIMIT=50 python scripts/collect_kimchi_cases.py data/cases_kimchi.json
+    # 증분(기존 파일에 새 상장만 추가 — 반복 실행이 빠름):
+    COLLECT_APPEND=1 python scripts/collect_kimchi_cases.py data/cases_kimchi.json
+    # 전체 재수집(필드 추가 후 전부 갱신할 때):
+    python scripts/collect_kimchi_cases.py data/cases_kimchi.json
+
+    # 그 외 옵션: COLLECT_PAGES=40 COLLECT_ENTRY_MIN=5 COLLECT_DEX_INTERVAL=4.0
+    # COLLECT_LIMIT=N 은 최신 N건만(공지는 newest-first). 증분(APPEND)과 함께면 신규 N건.
 
 그다음:
     python scripts/backfill_cases.py data/cases_kimchi.json
@@ -56,7 +62,9 @@ def main() -> None:
     entry_offset = float(os.environ.get("COLLECT_ENTRY_MIN", "5")) * 60
     sleep_s = float(os.environ.get("COLLECT_SLEEP", "0"))  # throttle 가 페이싱 담당
     dex_min_liq = float(os.environ.get("COLLECT_DEX_MIN_LIQ", "30000"))  # 실매수 가능 풀만
-    limit = int(os.environ.get("COLLECT_LIMIT", "0"))
+    limit = int(os.environ.get("COLLECT_LIMIT", "0"))  # >0: 최신 N건만(빠른 테스트/갱신)
+    # 증분: 기존 출력의 이미 수집한 종목은 건너뛰고 새 상장만 추가(반복 실행 빠름)
+    append = os.environ.get("COLLECT_APPEND", "0").lower() not in ("0", "false", "no")
 
     config = Config.load()
     setup_logging(config.log_level)
@@ -96,11 +104,29 @@ def main() -> None:
     anns = fetch_upbit_archive(http_proxy, config.upbit_announcements_url, pages=pages)
     log.info("공지 아카이브 %d건 수신 (pages=%d)", len(anns), pages)
 
-    cases: list[dict] = []
+    # 증분 모드: 기존 케이스 로드 → 이미 수집한 종목은 seen 으로 건너뜀
+    existing: list[dict] = []
     seen: set[str] = set()
+    if append and os.path.exists(out_path):
+        try:
+            with open(out_path, encoding="utf-8") as fh:
+                prev = json.load(fh)
+            existing = prev.get("cases", prev) if isinstance(prev, dict) else prev
+            seen = {c.get("symbol") for c in existing if c.get("symbol")}
+            log.info("증분 모드: 기존 %d건 로드 → %d종목 건너뜀(새 상장만 추가)",
+                     len(existing), len(seen))
+        except Exception:  # noqa: BLE001
+            log.exception("기존 케이스 로드 실패 → 전체 수집")
+
+    cases: list[dict] = []
     for ann in anns:
+        if limit and len(cases) >= limit:
+            break
         parsed = parse_title(ann.title)
         if not (parsed.is_listing and parsed.is_krw and parsed.symbols):
+            continue
+        # 이미 수집한 상장은 본문 fetch 도 생략(증분 빠르게)
+        if all(s in seen for s in parsed.symbols):
             continue
         dt = parse_iso(ann.published_at)
         if dt is None:
@@ -242,14 +268,18 @@ def main() -> None:
         if limit and len(cases) >= limit:
             break
 
+    all_cases = existing + cases   # 증분이면 기존 + 신규, 아니면 신규만(=전체)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump({
             "note": (f"collect_kimchi_cases.py (공지+{entry_offset/60:.0f}분 해외 USDT 매수 "
                      "→ 업비트 상장오픈 KRW 매도, USDT-KRW 환율 적용)."),
-            "cases": cases,
+            "cases": all_cases,
         }, fh, ensure_ascii=False, indent=2)
-    print(f"수집 완료: {len(cases)}건 → {out_path}")
+    if append:
+        print(f"수집 완료: 신규 {len(cases)}건 (총 {len(all_cases)}건) → {out_path}")
+    else:
+        print(f"수집 완료: {len(all_cases)}건 → {out_path}")
 
 
 if __name__ == "__main__":
