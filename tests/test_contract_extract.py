@@ -3,7 +3,28 @@ import unittest
 from wonsang_bot.detector.contract_extract import (
     extract_contracts_from_text,
     normalize_chain,
+    parse_deposit_network,
 )
+
+
+class TestDepositNetwork(unittest.TestCase):
+    def test_table_network_ethereum(self):
+        body = ("신규 디지털 자산 거래지원 안내\n"
+                "디지털 자산 마켓 네트워크 입출금 개시\n"
+                "리(RE) KRW, BTC, USDT Ethereum 공지 게시 시점")
+        self.assertEqual(parse_deposit_network(body), "ethereum")
+
+    def test_bnb_smart_chain(self):
+        body = "디지털 자산 마켓 네트워크 ...\nABC KRW BNB Smart Chain 입금"
+        self.assertEqual(parse_deposit_network(body), "bsc")
+
+    def test_solana(self):
+        body = "네트워크: Solana"
+        self.assertEqual(parse_deposit_network(body), "solana")
+
+    def test_none_when_no_network(self):
+        self.assertIsNone(parse_deposit_network("네트워크 안내 없음"))
+        self.assertIsNone(parse_deposit_network(None))
 
 A40 = "a" * 40
 B40 = "b" * 40

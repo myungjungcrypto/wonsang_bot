@@ -54,6 +54,8 @@ class ListingDetected:
     pre_listed_bithumb: bool | None = None
     # True=상장 시점 이미 바이낸스(USDT)에 있던 코인, False=미상장, None=미상
     pre_listed_binance: bool | None = None
+    # 업비트 입금 지원 네트워크(공지 '네트워크' 칸 파싱) — 브릿지 목적지
+    deposit_network: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -90,6 +92,7 @@ class GradePredicted:
     buy_venue: str | None = None         # 매수처(cex명 또는 dex:chain)
     buy_price: float | None = None       # 최저가(USD)
     venue_count: int | None = None       # 구매 가능 거래소 수
+    bridge: dict[str, Any] | None = None  # 브릿지 경로(매수체인≠입금체인 시) {tool,duration_sec,...}
     predicted_at: str = field(default_factory=now_iso)
     notes: str = ""
 

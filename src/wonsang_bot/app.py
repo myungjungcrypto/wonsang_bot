@@ -11,6 +11,7 @@ from .collector.buyrouting import make_venue_provider
 from .collector.coingecko import CoinGeckoTokens, make_market_provider
 from .collector.dex import GeckoTerminalDEX
 from .collector.exchanges import binance_pre_listed, build_overseas_aggregator
+from .collector.lifi import LiFiClient
 from .collector.lunarcrush import LunarCrushClient, make_social_provider
 from .detector.service import DetectorService
 from .detector.sources.bithumb import BithumbSource, bithumb_pre_listed
@@ -71,7 +72,15 @@ def build_service(config: Config) -> DetectorService:
             dex = GeckoTerminalDEX(HttpClient(
                 timeout=config.http_timeout_sec, proxy=None,
                 user_agent=config.request_user_agent, min_interval=4.0, max_retries=2))
-        venue_provider = make_venue_provider(overseas, dex, cg_tokens)
+        # 브릿지 경로(LI.FI): 매수 체인 ≠ 업비트 입금 체인일 때 경로 탐색
+        lifi = None
+        if config.lifi_enabled:
+            lifi = LiFiClient(config, HttpClient(
+                timeout=config.http_timeout_sec, proxy=None,
+                user_agent=config.request_user_agent, min_interval=0.5, max_retries=2))
+        venue_provider = make_venue_provider(
+            overseas, dex, cg_tokens, lifi=lifi,
+            from_address=config.lifi_from_address)
         # 소셜 provider: LunarCrush(키 있을 때만). 미연결이면 social 비활성.
         social_provider = None
         if config.lunarcrush_enabled and config.lunarcrush_api_key:
@@ -86,9 +95,9 @@ def build_service(config: Config) -> DetectorService:
             venue_provider=venue_provider,
         )
         bus.subscribe(GradePredicted, notifier.on_grade)
-        log.info("등급 예측: ON (과거 케이스 %d건, 시총=%s, 소셜=%s)",
+        log.info("등급 예측: ON (과거 케이스 %d건, 시총=%s, 소셜=%s, 브릿지=%s)",
                  len(historical.cases), "ON" if market_provider else "OFF",
-                 "ON" if social_provider else "OFF")
+                 "ON" if social_provider else "OFF", "ON" if lifi else "OFF")
 
     sources = []
     if config.upbit_enabled:

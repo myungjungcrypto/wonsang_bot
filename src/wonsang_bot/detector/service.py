@@ -15,6 +15,7 @@ from ..core.events import Announcement, ListingDetected
 from ..resolver.contract import ContractResolver
 from ..storage.db import Storage
 from .diff import find_new
+from .contract_extract import parse_deposit_network
 from .parser import parse_title
 from .sources.base import AnnouncementSource
 
@@ -115,6 +116,7 @@ class DetectorService:
         contracts = []
         if self.resolver is not None:
             contracts = self.resolver.resolve(parsed.symbols, ann, body)
+        deposit_network = parse_deposit_network(body)  # 공지 '네트워크' 칸 → 브릿지 목적지
 
         # 업비트(BTC/USDT)·빗썸·바이낸스 선상장 여부(평가 기준)
         pre_listed: bool | None = None
@@ -151,6 +153,7 @@ class DetectorService:
             pre_listed=pre_listed,
             pre_listed_bithumb=pre_listed_bithumb,
             pre_listed_binance=pre_listed_binance,
+            deposit_network=deposit_network,
         )
         self.storage.save_listing(ev)
         log.info(

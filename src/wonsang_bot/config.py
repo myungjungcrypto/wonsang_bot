@@ -68,6 +68,7 @@ _UPBIT_URL = (
 _BITHUMB_URL = "https://api.bithumb.com/v1/notices?count=20"
 _COINGECKO_URL = "https://api.coingecko.com/api/v3"
 _LUNARCRUSH_URL = "https://lunarcrush.com/api4"
+_LIFI_URL = "https://li.quest/v1"
 # 실제 브라우저 UA (api-manager.upbit.com 등 봇 차단 회피용)
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -110,6 +111,12 @@ class Config:
     lunarcrush_enabled: bool = False
     lunarcrush_api_key: str | None = None
     lunarcrush_base_url: str = "https://lunarcrush.com/api4"
+
+    # --- 브릿지 경로(LI.FI, 선택형) ---
+    lifi_enabled: bool = False
+    lifi_api_key: str | None = None
+    lifi_base_url: str = "https://li.quest/v1"
+    lifi_from_address: str | None = None    # 견적용 지갑(없으면 placeholder)
 
     # --- 등급 예측(Phase 2) ---
     predictor_enabled: bool = True
@@ -167,6 +174,10 @@ class Config:
             lunarcrush_enabled=_get_bool("LUNARCRUSH_ENABLED", False),
             lunarcrush_api_key=_get("LUNARCRUSH_API_KEY"),
             lunarcrush_base_url=_get("LUNARCRUSH_BASE_URL", _LUNARCRUSH_URL),  # type: ignore[arg-type]
+            lifi_enabled=_get_bool("LIFI_ENABLED", False),
+            lifi_api_key=_get("LIFI_API_KEY"),
+            lifi_base_url=_get("LIFI_BASE_URL", _LIFI_URL),  # type: ignore[arg-type]
+            lifi_from_address=_get("LIFI_FROM_ADDRESS"),
             predictor_enabled=_get_bool("PREDICTOR_ENABLED", True),
             w_timing=_get_float("W_TIMING", 1.0),
             w_narrative=_get_float("W_NARRATIVE", 1.5),

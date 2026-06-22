@@ -89,6 +89,7 @@ class PredictorService:
             buy_venue=(buy or {}).get("buy_venue"),
             buy_price=(buy or {}).get("buy_price"),
             venue_count=(buy or {}).get("venue_count"),
+            bridge=(buy or {}).get("bridge"),
         )
         log.info(
             "등급 예측: %s %s → %s (score=%.3f conf=%.2f, 2차=%s)",

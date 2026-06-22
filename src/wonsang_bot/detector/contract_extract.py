@@ -17,7 +17,7 @@ from ..core.events import Contract
 # 체인 정규화: canonical -> 본문에 등장할 수 있는 표기들(소문자 비교)
 CHAIN_HINTS: dict[str, tuple[str, ...]] = {
     "ethereum": ("이더리움", "ethereum", "erc-20", "erc20", "eth 네트워크", "eth mainnet"),
-    "bsc": ("바이낸스 스마트", "bnb chain", "bnb 체인", "bsc", "bep-20", "bep20"),
+    "bsc": ("바이낸스 스마트", "bnb smart", "bnb chain", "bnb 체인", "bsc", "bep-20", "bep20"),
     "base": ("base 네트워크", "base mainnet", "베이스 네트워크", " base ", "(base)"),
     "arbitrum": ("아비트럼", "arbitrum", "arb 네트워크"),
     "polygon": ("폴리곤", "polygon", "matic"),
@@ -80,6 +80,27 @@ def _nearest_chain(
         if dist < best_dist:
             best_dist, best = dist, canon
     return best or default
+
+
+def parse_deposit_network(text: str | None) -> str | None:
+    """공지 본문의 '네트워크' 칸 → 업비트 입금 지원 체인(브릿지 목적지).
+
+    업비트 신규상장 공지엔 표로 '디지털자산|마켓|네트워크|...'가 있고 네트워크 칸에
+    Ethereum/Solana/BNB Smart Chain 등이 적힘. '네트워크' 라벨 뒤 가장 가까운 체인
+    힌트를 채택(없으면 본문 첫 힌트). 라이브에서 표기 재검증 필요.
+    """
+    if not text:
+        return None
+    low = text.lower()
+    hints = sorted(_find_hints(low), key=lambda t: t[0])
+    if not hints:
+        return None
+    label = low.find("네트워크")
+    if label != -1:
+        after = [c for idx, c in hints if idx >= label]
+        if after:
+            return after[0]
+    return hints[0][1]
 
 
 def extract_contracts_from_text(text: str | None) -> list[Contract]:

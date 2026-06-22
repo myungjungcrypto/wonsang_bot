@@ -71,6 +71,13 @@ class TelegramNotifier:
         if ev.buy_venue and ev.buy_price is not None:
             vc = f", {ev.venue_count}곳" if ev.venue_count else ""
             lines.append(f"💰 매수처: {_esc(ev.buy_venue)} ${ev.buy_price:,.6g}{vc}")
+        if ev.bridge:
+            b = ev.bridge
+            dur = b.get("duration_sec")
+            dur_s = f", ~{int(dur) // 60}분" if isinstance(dur, (int, float)) and dur else ""
+            lines.append(
+                f"🌉 브릿지: {_esc(b.get('from_chain'))}→{_esc(b.get('to_chain'))} "
+                f"via {_esc(b.get('tool'))}{dur_s}")
         lines.append("─ 근거 ─")
         for f in ev.features:
             mark = "" if f.available else " (데이터없음)"

@@ -24,10 +24,18 @@ class BuyRoute:
     used_dex: bool = False
     coin_id: Optional[str] = None            # 코인게코 신원(시총 등 재사용)
     mismatch: bool = False                   # 컨트랙트가 상장심볼과 불일치(다른 토큰)
+    platforms: dict[str, str] = field(default_factory=dict)  # {chain: token주소}(브릿지용)
 
     @property
     def venue_count(self) -> int:
         return len(self.venues)
+
+    @property
+    def buy_chain(self) -> Optional[str]:
+        """매수처가 DEX면 그 체인(dex:<chain>), CEX면 None(출금 시 네트워크 선택)."""
+        if self.buy_venue and self.buy_venue.startswith("dex:"):
+            return self.buy_venue.split(":", 1)[1]
+        return None
 
 
 def gather_buy_route(
@@ -87,14 +95,44 @@ def gather_buy_route(
         buy_price=price, buy_venue=venue, price_spread=spread, venues=venues,
         used_dex=bool(venue and venue.startswith("dex")),
         coin_id=(resolved.coin_id if resolved else None),
+        platforms=dict(resolved.platforms) if resolved else {},
     )
 
 
+# 체인별 토큰 소수자릿수 추정(브릿지 fromAmount 환산용 — 정확값 없을 때 근사)
+_DECIMALS_GUESS = {"solana": 9, "tron": 6}
+
+
+def find_bridge_route(
+    route: "BuyRoute", deposit_network: Optional[str], lifi: Any,
+    trade_usd: float = TRADE_USD_DEFAULT, from_address: Optional[str] = None,
+) -> dict | None:
+    """매수 체인 ≠ 업비트 입금 체인이면 LI.FI 로 브릿지 경로 1건. 아니면 None.
+
+    CEX 매수(buy_chain None)는 출금 시 네트워크 선택으로 해결 → 브릿지 불필요.
+    """
+    if lifi is None or not deposit_network:
+        return None
+    buy_chain = route.buy_chain
+    if not buy_chain or buy_chain == deposit_network:
+        return None
+    from_token = route.platforms.get(buy_chain)
+    to_token = route.platforms.get(deposit_network)
+    if not from_token or not to_token or not route.buy_price:
+        return None
+    decimals = _DECIMALS_GUESS.get(buy_chain, 18)
+    amount = max(int((trade_usd / route.buy_price) * (10 ** decimals)), 1)
+    return lifi.route(buy_chain, from_token, deposit_network, to_token,
+                      str(amount), from_address)
+
+
 def make_venue_provider(overseas, dex, cg_tokens, dex_min_liq: float = 30000.0,
-                        trade_usd: float = TRADE_USD_DEFAULT):
+                        trade_usd: float = TRADE_USD_DEFAULT,
+                        lifi: Any = None, from_address: Optional[str] = None):
     """라이브 등급예측용 — 예측 시점(현재가)에 구매처 조회 → ctx.extra 에 넣을 dict.
 
-    반환 dict: venue_count / buy_venue / buy_price(유효가) / used_dex / venues. 없으면 None.
+    반환 dict: venue_count / buy_venue / buy_price(유효가) / used_dex / venues / bridge.
+    lifi 가 있고 매수 체인 ≠ 업비트 입금 체인(listing.deposit_network)이면 bridge 경로 포함.
     """
     import time as _t
 
@@ -109,11 +147,16 @@ def make_venue_provider(overseas, dex, cg_tokens, dex_min_liq: float = 30000.0,
         )
         if route.mismatch or route.venue_count == 0:
             return None
-        return {
+        out = {
             "venue_count": route.venue_count,
             "buy_venue": route.buy_venue,
             "buy_price": route.buy_price,
             "used_dex": route.used_dex,
             "venues": route.venues,
         }
+        bridge = find_bridge_route(route, getattr(listing, "deposit_network", None),
+                                   lifi, trade_usd=trade_usd, from_address=from_address)
+        if bridge:
+            out["bridge"] = bridge
+        return out
     return provider
