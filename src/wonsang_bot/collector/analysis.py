@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import statistics
 from typing import Any
 
 from ..predictor.labeling import grade_from_return
@@ -22,9 +23,11 @@ def _stats(rets: list[float]) -> dict[str, Any]:
     fails = sum(1 for r in rets if r < FAIL_PCT)
     return {
         "n": n,
-        "win_rate": round(wins / n, 3),    # ret>=10%
-        "fail_rate": round(fails / n, 3),  # ret<0%
-        "avg_ret": round(sum(rets) / n, 2),
+        "win_rate": round(wins / n, 3),       # ret>=10%
+        "fail_rate": round(fails / n, 3),      # ret<0%
+        "median_ret": round(statistics.median(rets), 2),  # 이상치에 강함(대표값)
+        "avg_ret": round(sum(rets) / n, 2),    # 이상치(대박)에 휘둘림 — 참고용
+        "max_ret": round(max(rets), 1),        # 최대 대박(이상치 확인용)
     }
 
 

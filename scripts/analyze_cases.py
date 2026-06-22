@@ -20,22 +20,24 @@ def main() -> None:
     s = summarize(cases)
 
     print(f"\n=== 전체 ({s['overall'].get('n', 0)}건) ===")
-    print(f"  평균수익률 {s['overall'].get('avg_ret')}%  "
-          f"승률(≥10%) {s['overall'].get('win_rate')}  "
-          f"실패율(<0%) {s['overall'].get('fail_rate')}")
+    print(f"  중앙값 {s['overall'].get('median_ret')}%  (평균 {s['overall'].get('avg_ret')}%, "
+          f"최대 {s['overall'].get('max_ret')}%)  "
+          f"승률(≥10%) {s['overall'].get('win_rate')}  실패율(<0%) {s['overall'].get('fail_rate')}")
     print(f"  등급분포: {s['grades']}")
 
-    print("\n=== 상장 유형별 ===")
+    print("\n=== 상장 유형별 (중앙값 기준 — 평균은 대박에 휘둘림) ===")
     for k, v in s["by_listing_type"].items():
         if v.get("n"):
-            print(f"  {k:18s} n={v['n']:3d}  실패율 {v['fail_rate']:.0%}  "
-                  f"승률 {v['win_rate']:.0%}  평균 {v['avg_ret']:+.1f}%")
+            print(f"  {k:18s} n={v['n']:3d}  중앙값 {v['median_ret']:+6.1f}%  "
+                  f"실패율 {v['fail_rate']:.0%}  승률 {v['win_rate']:.0%}  "
+                  f"(평균 {v['avg_ret']:+.0f}%)")
 
     print("\n=== 거래소 가용성별 ===")
     for k, v in s["by_venue_count"].items():
         if v.get("n"):
-            print(f"  {k:8s} n={v['n']:3d}  실패율 {v['fail_rate']:.0%}  "
-                  f"승률 {v['win_rate']:.0%}  평균 {v['avg_ret']:+.1f}%")
+            print(f"  {k:8s} n={v['n']:3d}  중앙값 {v['median_ret']:+6.1f}%  "
+                  f"실패율 {v['fail_rate']:.0%}  승률 {v['win_rate']:.0%}  "
+                  f"(평균 {v['avg_ret']:+.0f}%)")
     print()
 
 
