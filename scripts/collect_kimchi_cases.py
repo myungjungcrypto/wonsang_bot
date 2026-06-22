@@ -17,6 +17,7 @@
     python scripts/collect_kimchi_cases.py data/cases_kimchi.json
 
     # 그 외 옵션: COLLECT_PAGES=40 COLLECT_ENTRY_MIN=5 COLLECT_DEX_INTERVAL=4.0
+    #            COLLECT_TRADE_USD=10000 (매수규모=슬리피지 기준)
     # COLLECT_LIMIT=N 은 최신 N건만(공지는 newest-first). 증분(APPEND)과 함께면 신규 N건.
 
 그다음:
@@ -63,6 +64,7 @@ def main() -> None:
     entry_offset = float(os.environ.get("COLLECT_ENTRY_MIN", "5")) * 60
     sleep_s = float(os.environ.get("COLLECT_SLEEP", "0"))  # throttle 가 페이싱 담당
     dex_min_liq = float(os.environ.get("COLLECT_DEX_MIN_LIQ", "30000"))  # 실매수 가능 풀만
+    trade_usd = float(os.environ.get("COLLECT_TRADE_USD", "10000"))  # 매수규모(슬리피지 기준)
     limit = int(os.environ.get("COLLECT_LIMIT", "0"))  # >0: 최신 N건만(빠른 테스트/갱신)
     # 증분: 기존 출력의 이미 수집한 종목은 건너뛰고 새 상장만 추가(반복 실행 빠름)
     append = os.environ.get("COLLECT_APPEND", "0").lower() not in ("0", "false", "no")
@@ -191,7 +193,7 @@ def main() -> None:
                 route = gather_buy_route(
                     symbol, buy_ts, contracts,
                     overseas=overseas, dex=dex, cg_tokens=cg_tokens,
-                    dex_min_liq=dex_min_liq,
+                    dex_min_liq=dex_min_liq, trade_usd=trade_usd,
                 )
                 if route.mismatch:
                     log.info("스킵 %s: 공지 컨트랙트가 상장심볼과 불일치(다른 토큰)", symbol)
@@ -263,11 +265,12 @@ def main() -> None:
                 "meta": {
                     "announce_ts": announce_ts,
                     "listing_ts": listing_ts,
-                    "usd_buy": usd_buy,
+                    "usd_buy": usd_buy,                 # 유효 체결가(슬리피지·수수료 반영)
+                    "trade_usd": trade_usd,            # 매수 규모(슬리피지 기준)
                     "krw_sell": krw_sell,
                     "usdt_krw": usdt_krw,
                     "gap_hours": round((listing_ts - announce_ts) / 3600, 2),
-                    "buy_venue": quote.buy_venue,      # 매수처(유동성 최대)
+                    "buy_venue": quote.buy_venue,      # 매수처(유효가 최저)
                     "price_spread": quote.price_spread,  # 거래소간 가격차(충돌 진단)
                     "venues": quote.venues,            # name→{price,liq}
                     "venue_count": len(quote.venues),  # 가용성 피처

@@ -42,7 +42,7 @@ class TestParsers(unittest.TestCase):
 
 class TestChooseBuyVenue(unittest.TestCase):
     def test_cheapest_among_liquidity_survivors(self):
-        # 같은 토큰(신원확정)이면 더 싼 곳이 더 좋은 매수처 → 최저가 채택
+        # CEX 최저가 채택. 반환가는 유효 체결가(테이커 수수료 0.1% 반영).
         venues = {
             "binance": {"price": 1.00, "liq": 5000, "kind": "cex"},
             "gate": {"price": 0.98, "liq": 9000, "kind": "cex"},     # 최저가 → 선택
@@ -50,34 +50,45 @@ class TestChooseBuyVenue(unittest.TestCase):
         }
         price, venue, _ = choose_buy_venue(venues)
         self.assertEqual(venue, "gate")
-        self.assertAlmostEqual(price, 0.98)
+        self.assertAlmostEqual(price, 0.98 * 1.001, places=5)
 
     def test_dex_cheaper_is_jackpot_not_filtered(self):
-        # DEX 가 CEX 보다 싸도(컨트랙트로 같은 토큰 확정) 걸러지지 않고 채택(대박)
+        # DEX 가 싸고 유동성 크면(슬리피지 작음) 채택(대박). 유효가 = mid×(1+2t/R)×(1+fee).
         venues = {
             "binance": {"price": 1.00, "liq": 5000, "kind": "cex"},
-            "dex:bsc": {"price": 0.62, "liq": 500000, "kind": "dex"},  # 싸고 유동성 큼
+            "dex:bsc": {"price": 0.62, "liq": 500000, "kind": "dex"},
         }
         price, venue, _ = choose_buy_venue(venues)
         self.assertEqual(venue, "dex:bsc")
-        self.assertAlmostEqual(price, 0.62)
+        self.assertAlmostEqual(price, 0.62 * 1.04 * 1.003, places=5)
+
+    def test_deep_pool_beats_thin_cheaper_pool(self):
+        # Phase3 핵심: 얇고 싼 풀(0.50)이 슬리피지로 깊은 풀(0.55)보다 실제 비쌈 → 깊은 풀 채택
+        venues = {
+            "dex:thin": {"price": 0.50, "liq": 40000, "kind": "dex"},   # 유효 ~0.752
+            "dex:deep": {"price": 0.55, "liq": 2_000_000, "kind": "dex"},  # 유효 ~0.557
+        }
+        price, venue, _ = choose_buy_venue(venues)
+        self.assertEqual(venue, "dex:deep")
+        self.assertLess(price, 0.60)
 
     def test_drops_low_liquidity_dex(self):
-        # 유동성 부족 DEX($10k 매수 불가)는 가격 무관 제외 → CEX 채택
+        # 유동성 부족 DEX($10k 매수 불가)는 제외 → CEX 채택
         venues = {
             "binance": {"price": 1.00, "liq": 5000, "kind": "cex"},
             "dex:ethereum": {"price": 0.05, "liq": 8000, "kind": "dex"},  # reserve<30k → 제외
         }
         price, venue, _ = choose_buy_venue(venues, dex_min_liq=30000)
         self.assertEqual(venue, "binance")
-        self.assertAlmostEqual(price, 1.0)
+        self.assertAlmostEqual(price, 1.0 * 1.001, places=5)
 
     def test_dex_only_coin(self):
-        # CEX 어디에도 없고 DEX 풀만(유동성 충분) → DEX 채택
+        # CEX 없고 DEX 풀만 → DEX 채택. 유효가는 슬리피지로 mid 보다 높음.
         venues = {"dex:ethereum": {"price": 0.05, "liq": 50000, "kind": "dex"}}
         price, venue, _ = choose_buy_venue(venues)
         self.assertEqual(venue, "dex:ethereum")
-        self.assertAlmostEqual(price, 0.05)
+        self.assertGreater(price, 0.05)
+        self.assertAlmostEqual(price, 0.05 * 1.4 * 1.003, places=5)
 
     def test_empty(self):
         self.assertEqual(choose_buy_venue({}), (None, None, 0.0))

@@ -52,7 +52,8 @@ class TestGatherBuyRoute(unittest.TestCase):
         r = gather_buy_route("IRYS", 1000, [C("ethereum", "0xIRYS")],
                              overseas=overseas, dex=dex, cg_tokens=cg)
         self.assertEqual(r.buy_venue, "dex:bsc")
-        self.assertAlmostEqual(r.buy_price, 0.062)
+        # 유효 체결가(슬리피지+수수료): 0.062×(1+2·10000/500000)×1.003
+        self.assertAlmostEqual(r.buy_price, 0.062 * 1.04 * 1.003, places=5)
         self.assertTrue(r.used_dex)
         self.assertEqual(r.coin_id, "irys")
         self.assertEqual(r.venue_count, 3)  # binance + dex:ethereum + dex:bsc

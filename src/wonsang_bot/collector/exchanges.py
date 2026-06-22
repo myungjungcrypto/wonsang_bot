@@ -92,18 +92,44 @@ def parse_bitget(p):   # data: [ts,o,h,l,c,baseVol,quoteVol,...]
 
 # ---------------- 매수처 선택 (순수) ----------------
 
+TRADE_USD_DEFAULT = 10000.0   # 따리 1회 매수 규모(슬리피지 추정 기준)
+DEX_FEE = 0.003               # DEX 스왑 수수료(대표값 0.3%)
+CEX_FEE = 0.001               # CEX 테이커 수수료(대표값 0.1%)
+
+
+def effective_price(d: dict, trade_usd: float = TRADE_USD_DEFAULT) -> Optional[float]:
+    """trade_usd 를 실제 매수했을 때의 **유효 체결가**(슬리피지+수수료 반영).
+
+    - DEX(v2 근사): 매수액이 견적측 reserve(≈reserve_in_usd/2)를 밀어올림 →
+      effective = mid × (1 + 2·trade/reserve) × (1+수수료). 얇은 풀일수록 급등.
+    - CEX: 호가 깊다 가정 → mid × (1+테이커수수료).
+    가격 없거나 DEX 유동성 0이면 None.
+    """
+    price = d.get("price")
+    if not price or price <= 0:
+        return None
+    if d.get("kind") == "dex":
+        liq = d.get("liq", 0.0) or 0.0
+        if liq <= 0:
+            return None
+        return price * (1.0 + 2.0 * trade_usd / liq) * (1.0 + DEX_FEE)
+    return price * (1.0 + CEX_FEE)
+
+
 def choose_buy_venue(
-    venues: dict[str, dict], dex_min_liq: float = 30000.0, cex_min_liq: float = 0.0
+    venues: dict[str, dict], dex_min_liq: float = 30000.0, cex_min_liq: float = 0.0,
+    trade_usd: float = TRADE_USD_DEFAULT,
 ) -> tuple[Optional[float], Optional[str], float]:
-    """유동성 컷을 통과한 구매처 중 **최저가** → (price, venue, price_spread).
+    """유동성 컷 통과 구매처 중 **유효 체결가(슬리피지 반영) 최저** → (price, venue, spread).
 
     노이즈는 **가격이 아니라 신원+유동성**으로 거른다(신원은 호출 전에 확정):
     - DEX(컨트랙트로 같은 토큰 확정): 풀 reserve >= dex_min_liq 인 것만.
     - CEX(코인게코 티커로 신원 확정): 거래대금 >= cex_min_liq 인 것만.
-    같은 토큰이면 더 싼 곳이 곧 더 좋은 매수처(대박) → 살아남은 것 중 최저가 채택.
+    선택·반환가는 mid 가 아니라 trade_usd 매수 시 **유효 체결가** — 얇고 싼 풀이
+    슬리피지로 실제론 비쌀 수 있으니 깊은 풀이 이긴다(현실적 매수처).
     venue dict 는 {"price","liq","kind": "cex"|"dex"} 형식.
     """
-    kept: list[tuple[str, float, float]] = []
+    kept: list[tuple[str, float, float]] = []   # (name, mid, effective)
     for name, d in venues.items():
         price = d.get("price")
         if not price or price <= 0:
@@ -112,13 +138,16 @@ def choose_buy_venue(
         floor = dex_min_liq if d.get("kind") == "dex" else cex_min_liq
         if liq < floor:
             continue
-        kept.append((name, price, liq))
+        eff = effective_price(d, trade_usd)
+        if eff is None:
+            continue
+        kept.append((name, price, eff))
     if not kept:
         return None, None, 0.0
-    prices = sorted(p for _, p, _ in kept)
-    spread = round(prices[-1] / prices[0] - 1.0, 3) if prices[0] > 0 else 0.0
-    name, price, _ = min(kept, key=lambda t: t[1])  # 최저가(같은 토큰이면 싼 게 이득)
-    return price, name, spread
+    mids = sorted(m for _, m, _ in kept)
+    spread = round(mids[-1] / mids[0] - 1.0, 3) if mids[0] > 0 else 0.0
+    name, _mid, eff = min(kept, key=lambda t: t[2])  # 유효 체결가 최저
+    return round(eff, 8), name, spread
 
 
 # ---------------- 거래소 provider ----------------

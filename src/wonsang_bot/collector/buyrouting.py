@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .exchanges import OverseasAggregator, choose_buy_venue
+from .exchanges import TRADE_USD_DEFAULT, OverseasAggregator, choose_buy_venue
 
 log = logging.getLogger(__name__)
 
@@ -39,11 +39,13 @@ def gather_buy_route(
     dex: Any,
     cg_tokens: Any = None,
     dex_min_liq: float = 30000.0,
+    trade_usd: float = TRADE_USD_DEFAULT,
 ) -> BuyRoute:
-    """symbol 의 구매처(CEX+DEX)를 ts 시점으로 조회 → 유동성 컷 → 최저가.
+    """symbol 의 구매처(CEX+DEX)를 ts 시점으로 조회 → 유동성 컷 → 유효 체결가 최저.
 
     contracts: .chain/.address 를 가진 객체 리스트(공지 본문 추출). cg_tokens 있으면
     심볼 일치 컨트랙트로 신원 확정(전체 체인 + 티커검증 거래소). 없으면 best-effort.
+    buy_price 는 trade_usd 매수 시 슬리피지·수수료 반영 유효가.
     """
     # (1) 신원 확정
     resolved = None
@@ -78,8 +80,9 @@ def gather_buy_route(
             venues[f"dex:{ch}"] = {"price": round(dq[0], 8), "liq": round(dq[1], 2),
                                    "kind": "dex"}
 
-    # (4) 유동성 컷 통과분 중 최저가
-    price, venue, spread = choose_buy_venue(venues, dex_min_liq=dex_min_liq)
+    # (4) 유동성 컷 통과분 중 유효 체결가(슬리피지 반영) 최저
+    price, venue, spread = choose_buy_venue(venues, dex_min_liq=dex_min_liq,
+                                            trade_usd=trade_usd)
     return BuyRoute(
         buy_price=price, buy_venue=venue, price_spread=spread, venues=venues,
         used_dex=bool(venue and venue.startswith("dex")),
@@ -87,10 +90,11 @@ def gather_buy_route(
     )
 
 
-def make_venue_provider(overseas, dex, cg_tokens, dex_min_liq: float = 30000.0):
+def make_venue_provider(overseas, dex, cg_tokens, dex_min_liq: float = 30000.0,
+                        trade_usd: float = TRADE_USD_DEFAULT):
     """라이브 등급예측용 — 예측 시점(현재가)에 구매처 조회 → ctx.extra 에 넣을 dict.
 
-    반환 dict: venue_count / buy_venue / buy_price / used_dex / venues. 실패/없음이면 None.
+    반환 dict: venue_count / buy_venue / buy_price(유효가) / used_dex / venues. 없으면 None.
     """
     import time as _t
 
@@ -101,6 +105,7 @@ def make_venue_provider(overseas, dex, cg_tokens, dex_min_liq: float = 30000.0):
         route = gather_buy_route(
             syms[0], _t.time(), getattr(listing, "contracts", []) or [],
             overseas=overseas, dex=dex, cg_tokens=cg_tokens, dex_min_liq=dex_min_liq,
+            trade_usd=trade_usd,
         )
         if route.mismatch or route.venue_count == 0:
             return None
