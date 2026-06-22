@@ -30,6 +30,7 @@ class DetectorService:
         sources: list[AnnouncementSource],
         resolver: ContractResolver | None = None,
         bithumb_checker: Optional[Callable[[str], bool | None]] = None,
+        binance_checker: Optional[Callable[[str], bool | None]] = None,
     ) -> None:
         self.config = config
         self.storage = storage
@@ -37,6 +38,7 @@ class DetectorService:
         self.sources = sources
         self.resolver = resolver
         self.bithumb_checker = bithumb_checker   # symbol → 빗썸 기상장 여부
+        self.binance_checker = binance_checker   # symbol → 바이낸스 기상장 여부
         self._stop = asyncio.Event()
 
     def stop(self) -> None:
@@ -112,19 +114,26 @@ class DetectorService:
         if self.resolver is not None:
             contracts = self.resolver.resolve(parsed.symbols, ann, body)
 
-        # KRW만 추가된 기존 코인 여부(업비트 BTC/USDT 선상장) + 빗썸 기상장 여부
+        # 업비트(BTC/USDT)·빗썸·바이낸스 선상장 여부(평가 기준)
         pre_listed: bool | None = None
         pre_listed_bithumb: bool | None = None
+        pre_listed_binance: bool | None = None
         if parsed.symbols:
+            sym0 = parsed.symbols[0]
             try:
-                pre_listed = src.is_pre_listed(parsed.symbols[0])
+                pre_listed = src.is_pre_listed(sym0)
             except Exception:  # noqa: BLE001
                 pre_listed = None
             if self.bithumb_checker is not None:
                 try:
-                    pre_listed_bithumb = self.bithumb_checker(parsed.symbols[0])
+                    pre_listed_bithumb = self.bithumb_checker(sym0)
                 except Exception:  # noqa: BLE001
                     pre_listed_bithumb = None
+            if self.binance_checker is not None:
+                try:
+                    pre_listed_binance = self.binance_checker(sym0)
+                except Exception:  # noqa: BLE001
+                    pre_listed_binance = None
 
         ev = ListingDetected(
             source=ann.source,
@@ -139,6 +148,7 @@ class DetectorService:
             confidence=parsed.confidence,
             pre_listed=pre_listed,
             pre_listed_bithumb=pre_listed_bithumb,
+            pre_listed_binance=pre_listed_binance,
         )
         self.storage.save_listing(ev)
         log.info(

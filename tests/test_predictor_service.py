@@ -38,11 +38,11 @@ class TestPredict(unittest.TestCase):
         self.assertIn(pred.grade, GRADES)
         self.assertGreaterEqual(pred.score, 0.0)
         self.assertLessEqual(pred.score, 1.0)
-        self.assertEqual(len(pred.features), 8)
-        # listing_type(None)/venue_count(미조회)/bithumb_listed(None)/marketcap/social 미가용
-        # → 가용 3개(timing/narrative/supply). conf = (1+1.5+2) / 전체가중합(13.5)
-        # 전체 = 1+1.5+2+1.5(listing_type)+3(venue_count)+1(bithumb)+2.5+1 = 13.5
-        self.assertAlmostEqual(pred.confidence, 4.5 / 13.5, places=3)
+        self.assertEqual(len(pred.features), 9)
+        # listing_type(None)/venue_count/bithumb/binance/marketcap/social 미가용
+        # → 가용 3개(timing/narrative/supply). conf = (1+1.5+2) / 전체가중합(14.5)
+        # 전체 = 1+1.5+2+1.5+3(venue)+1(bithumb)+1(binance)+2.5+1 = 14.5
+        self.assertAlmostEqual(pred.confidence, 4.5 / 14.5, places=3)
         avail = [f for f in pred.features if f.available]
         self.assertEqual(len(avail), 3)
 

@@ -36,6 +36,7 @@ class RawCase:
     mentions_per_hour: Optional[float] = None             # 상장시점 스냅샷(있으면)
     pre_listed: Optional[bool] = None                     # KRW만 추가(기존 코인) 여부
     pre_listed_bithumb: Optional[bool] = None             # 빗썸 기상장 여부
+    pre_listed_binance: Optional[bool] = None             # 바이낸스 기상장 여부
     meta: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -53,6 +54,7 @@ class RawCase:
             mentions_per_hour=d.get("mentions_per_hour"),
             pre_listed=d.get("pre_listed"),
             pre_listed_bithumb=d.get("pre_listed_bithumb"),
+            pre_listed_binance=d.get("pre_listed_binance"),
             meta=dict(d.get("meta", {})),
         )
 
@@ -74,6 +76,7 @@ def raw_to_listing(raw: RawCase) -> ListingDetected:
         published_at=raw.listed_at or None,
         pre_listed=raw.pre_listed,
         pre_listed_bithumb=raw.pre_listed_bithumb,
+        pre_listed_binance=raw.pre_listed_binance,
     )
     if raw.listed_at:
         listing.detected_at = raw.listed_at

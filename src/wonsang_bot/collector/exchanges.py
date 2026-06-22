@@ -11,8 +11,11 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Optional
+
+import requests
 
 from ..config import Config
 from ..httpclient import HttpClient
@@ -22,6 +25,28 @@ log = logging.getLogger(__name__)
 
 # (ts_sec, close, quote_volume)
 Series3 = list[tuple[float, float, float]]
+
+_BINANCE_KLINES = "https://data-api.binance.vision/api/v3/klines"
+
+
+def binance_pre_listed(
+    http: HttpClient, symbol: str, before_ts: Optional[float] = None
+) -> bool | None:
+    """바이낸스(USDT) 선상장 여부: before_ts(없으면 현재) 이전 일봉이 있나.
+
+    True=선상장(이미 거래중), False=미상장/심볼없음, None=조회 실패(네트워크).
+    심볼 없으면 바이낸스가 400 → False 로 처리.
+    """
+    end_ms = int((before_ts if before_ts else time.time()) * 1000)
+    url = (f"{_BINANCE_KLINES}?symbol={symbol.upper()}USDT&interval=1d"
+           f"&endTime={end_ms}&limit=1")
+    try:
+        rows = http.get_json(url)
+    except requests.HTTPError:
+        return False   # 잘못된 심볼(미상장) 등
+    except Exception:  # noqa: BLE001 - 네트워크 등 일시 실패
+        return None
+    return bool(isinstance(rows, list) and rows)
 
 
 def _rows3(rows, ts_i: int, close_i: int, qvol_i: int, ms: bool) -> Series3:

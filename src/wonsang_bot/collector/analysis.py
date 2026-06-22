@@ -36,6 +36,7 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
     by_type: dict[str, list[float]] = {"KRW만추가(기존코인)": [], "신규전체상장": [], "미상": []}
     by_venue: dict[str, list[float]] = {"1개소": [], "2-3개소": [], "4+개소": []}
     by_bithumb: dict[str, list[float]] = {"빗썸선상장": [], "빗썸미상장": [], "미상": []}
+    by_binance: dict[str, list[float]] = {"바이낸스선상장": [], "바이낸스미상장": [], "미상": []}
     grades: dict[str, int] = {}
 
     for c in cases:
@@ -52,6 +53,10 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
         bkey = "빗썸선상장" if bit is True else ("빗썸미상장" if bit is False else "미상")
         by_bithumb[bkey].append(r)
 
+        bnc = c.get("pre_listed_binance")
+        nkey = "바이낸스선상장" if bnc is True else ("바이낸스미상장" if bnc is False else "미상")
+        by_binance[nkey].append(r)
+
         vc = (c.get("meta") or {}).get("venue_count")
         if isinstance(vc, int):
             bucket = "1개소" if vc <= 1 else ("2-3개소" if vc <= 3 else "4+개소")
@@ -66,4 +71,5 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
         "by_listing_type": {k: _stats(v) for k, v in by_type.items()},
         "by_venue_count": {k: _stats(v) for k, v in by_venue.items()},
         "by_bithumb": {k: _stats(v) for k, v in by_bithumb.items()},
+        "by_binance": {k: _stats(v) for k, v in by_binance.items()},
     }

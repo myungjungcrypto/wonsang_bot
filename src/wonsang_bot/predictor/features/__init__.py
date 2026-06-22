@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ...config import Config
 from .base import FeatureContext, FeatureExtractor, Provider
+from .binance_listed import BinanceListedFeature
 from .bithumb_listed import BithumbListedFeature
 from .listing_type import ListingTypeFeature
 from .marketcap import MarketCapFeature
@@ -22,6 +23,7 @@ def build_extractors(config: Config) -> list[FeatureExtractor]:
         ListingTypeFeature(config.w_listing_type),
         VenueCountFeature(config.w_venue_count),
         BithumbListedFeature(config.w_bithumb_listed),
+        BinanceListedFeature(config.w_binance_listed),
         MarketCapFeature(config.w_marketcap),
         SocialFeature(config.w_social),
     ]
@@ -37,6 +39,7 @@ __all__ = [
     "ListingTypeFeature",
     "VenueCountFeature",
     "BithumbListedFeature",
+    "BinanceListedFeature",
     "MarketCapFeature",
     "SocialFeature",
     "build_extractors",

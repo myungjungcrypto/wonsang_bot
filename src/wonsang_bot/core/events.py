@@ -52,6 +52,8 @@ class ListingDetected:
     pre_listed: bool | None = None
     # True=상장 시점 이미 빗썸(KRW)에 있던 코인, False=빗썸 미상장, None=미상
     pre_listed_bithumb: bool | None = None
+    # True=상장 시점 이미 바이낸스(USDT)에 있던 코인, False=미상장, None=미상
+    pre_listed_binance: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

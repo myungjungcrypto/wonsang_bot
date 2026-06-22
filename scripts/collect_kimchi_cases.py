@@ -37,6 +37,7 @@ from wonsang_bot.collector.coingecko import CoinGeckoTokens  # noqa: E402
 from wonsang_bot.collector.dex import GeckoTerminalDEX  # noqa: E402
 from wonsang_bot.collector.exchanges import (  # noqa: E402
     Quote,
+    binance_pre_listed,
     build_overseas_aggregator,
     choose_buy_venue,
 )
@@ -88,6 +89,10 @@ def main() -> None:
                               user_agent=config.request_user_agent,
                               min_interval=0.2, max_retries=3, cache_dir=cache_dir)
     bithumb = UpbitMarketBackfiller(http_bithumb, base_url=BITHUMB_API)
+    # 바이낸스 선상장 판정용 client(klines 한도 넉넉 + 캐시)
+    http_binance = HttpClient(timeout=config.http_timeout_sec, proxy=None,
+                              user_agent=config.request_user_agent,
+                              min_interval=0.1, max_retries=2, cache_dir=cache_dir)
     overseas = build_overseas_aggregator(config)  # 7개 CEX 집계(거래소별 독립 client)
     src = UpbitSource(config.upbit_announcements_url, http_proxy)  # 공지 본문(컨트랙트)
 
@@ -261,6 +266,10 @@ def main() -> None:
             except Exception:  # noqa: BLE001 - 조회 실패는 미상(None)
                 pre_listed_bithumb = None
 
+            # 바이낸스 선상장 여부: 공지 1시간 전 바이낸스 USDT 일봉이 있었나
+            pre_listed_binance = binance_pre_listed(http_binance, symbol,
+                                                    announce_ts - 3600)
+
             cases.append({
                 "id": f"upbit:{symbol}",
                 "symbol": symbol,
@@ -274,6 +283,7 @@ def main() -> None:
                 "mentions_per_hour": None,
                 "pre_listed": pre_listed,
                 "pre_listed_bithumb": pre_listed_bithumb,
+                "pre_listed_binance": pre_listed_binance,
                 "meta": {
                     "announce_ts": announce_ts,
                     "listing_ts": listing_ts,
