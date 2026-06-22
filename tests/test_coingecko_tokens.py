@@ -147,6 +147,12 @@ class TestMarketCap(unittest.TestCase):
         )
         self.assertEqual(provider(listing), {"market_cap_usd": 9_000_000})
 
+    def test_market_cap_at_history(self):
+        http = _FakeHttp({"x/history": {"market_data": {"market_cap": {"usd": 3_300_000}}}})
+        cg = CoinGeckoTokens(_Cfg(), http)
+        self.assertEqual(cg.market_cap_at("x", 1_700_000_000), 3_300_000)
+        self.assertIsNone(cg.market_cap_at(None, 1_700_000_000))
+
     def test_market_provider_none_when_no_contracts(self):
         provider = make_market_provider(CoinGeckoTokens(_Cfg(), _FakeHttp({})))
         listing = ListingDetected(source="upbit", announcement_id="1", title="t",

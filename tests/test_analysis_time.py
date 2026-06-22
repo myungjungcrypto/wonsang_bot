@@ -33,6 +33,17 @@ class TestSummarizeTime(unittest.TestCase):
         self.assertEqual(s["by_daypart"]["저녁(17-24)"]["n"], 1)
         self.assertEqual(s["by_daypart"]["오후(12-17)"]["n"], 1)
 
+    def test_buckets_by_marketcap(self):
+        cases = [
+            {"realized_return_pct": 20, "market_cap_usd": 5_000_000},     # <$10M
+            {"realized_return_pct": 5, "market_cap_usd": 300_000_000},    # $100M-1B
+            {"realized_return_pct": 1},                                   # 미상
+        ]
+        s = summarize(cases)
+        self.assertEqual(s["by_marketcap"]["<$10M"]["n"], 1)
+        self.assertEqual(s["by_marketcap"]["$100M-1B"]["n"], 1)
+        self.assertEqual(s["by_marketcap"]["미상"]["n"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

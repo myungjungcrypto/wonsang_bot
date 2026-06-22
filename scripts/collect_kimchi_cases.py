@@ -270,6 +270,11 @@ def main() -> None:
             pre_listed_binance = binance_pre_listed(http_binance, symbol,
                                                     announce_ts - 3600)
 
+            # 과거 시총: 신원확정(coin_id) 시 상장일 CoinGecko 시총(백필 marketcap 피처용)
+            market_cap_usd = None
+            if cg_tokens is not None and resolved is not None and resolved.coin_id:
+                market_cap_usd = cg_tokens.market_cap_at(resolved.coin_id, announce_ts)
+
             cases.append({
                 "id": f"upbit:{symbol}",
                 "symbol": symbol,
@@ -279,7 +284,7 @@ def main() -> None:
                 "is_krw": True,
                 "contracts": [{"chain": c.chain, "address": c.address} for c in contracts],
                 "realized_return_pct": ret,
-                "market_cap_usd": None,
+                "market_cap_usd": market_cap_usd,
                 "mentions_per_hour": None,
                 "pre_listed": pre_listed,
                 "pre_listed_bithumb": pre_listed_bithumb,

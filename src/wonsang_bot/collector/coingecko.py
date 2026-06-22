@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from ..config import Config
 from ..httpclient import HttpClient
@@ -159,6 +160,24 @@ class CoinGeckoTokens:
             log.debug("CoinGecko 티커 조회 실패 %s", coin_id, exc_info=True)
             return set()
         return parse_ticker_exchanges(data)
+
+    def market_cap_at(self, coin_id: str | None, when_ts: float) -> float | None:
+        """coin_id 의 특정 시점(UTC 날짜) 유통 시총 USD. 백필(과거 시총)용.
+
+        CoinGecko /coins/{id}/history?date=DD-MM-YYYY (그 날 스냅샷). 실패/없음 시 None.
+        """
+        if not coin_id:
+            return None
+        d = datetime.fromtimestamp(when_ts, tz=timezone.utc).strftime("%d-%m-%Y")
+        try:
+            data = self.http.get_json(
+                f"{self.base}/coins/{coin_id}/history?date={d}&localization=false",
+                headers=self._headers(),
+            )
+        except Exception:  # noqa: BLE001 - 신규코인은 과거 데이터 없을 수 있음
+            log.debug("CoinGecko 과거시총 조회 실패 %s@%s", coin_id, d, exc_info=True)
+            return None
+        return parse_market_cap(data)
 
 
 def make_market_provider(cg: "CoinGeckoTokens"):

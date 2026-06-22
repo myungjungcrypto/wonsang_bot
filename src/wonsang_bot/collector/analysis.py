@@ -63,6 +63,8 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
     by_weekday: dict[str, list[float]] = {d: [] for d in _WEEKDAYS}
     by_daypart: dict[str, list[float]] = {
         "심야(0-6)": [], "오전(6-12)": [], "오후(12-17)": [], "저녁(17-24)": []}
+    by_marketcap: dict[str, list[float]] = {
+        "<$10M": [], "$10-100M": [], "$100M-1B": [], ">$1B": [], "미상": []}
     grades: dict[str, int] = {}
 
     for c in cases:
@@ -94,6 +96,14 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
             bucket = "1개소" if vc <= 1 else ("2-3개소" if vc <= 3 else "4+개소")
             by_venue[bucket].append(r)
 
+        mc = c.get("market_cap_usd")
+        if isinstance(mc, (int, float)) and mc > 0:
+            mck = ("<$10M" if mc < 1e7 else "$10-100M" if mc < 1e8
+                   else "$100M-1B" if mc < 1e9 else ">$1B")
+        else:
+            mck = "미상"
+        by_marketcap[mck].append(r)
+
         g = grade_from_return(r)
         grades[g] = grades.get(g, 0) + 1
 
@@ -106,4 +116,5 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
         "by_binance": {k: _stats(v) for k, v in by_binance.items()},
         "by_weekday": {k: _stats(v) for k, v in by_weekday.items()},
         "by_daypart": {k: _stats(v) for k, v in by_daypart.items()},
+        "by_marketcap": {k: _stats(v) for k, v in by_marketcap.items()},
     }

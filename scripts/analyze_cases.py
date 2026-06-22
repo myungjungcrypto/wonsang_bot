@@ -81,6 +81,12 @@ def main() -> None:
         if v.get("n"):
             print(f"  {k:12s} n={v['n']:3d}  중앙값 {v['median_ret']:+6.1f}%  "
                   f"실패율 {v['fail_rate']:.0%}  승률 {v['win_rate']:.0%}")
+
+    print("\n=== 시총 구간별 (상장일 CoinGecko, marketcap 캘리브레이션용) ===")
+    for k, v in s.get("by_marketcap", {}).items():
+        if v.get("n"):
+            print(f"  {k:10s} n={v['n']:3d}  중앙값 {v['median_ret']:+6.1f}%  "
+                  f"실패율 {v['fail_rate']:.0%}  승률 {v['win_rate']:.0%}")
     print()
 
 
