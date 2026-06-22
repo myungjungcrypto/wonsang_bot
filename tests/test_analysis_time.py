@@ -30,8 +30,8 @@ class TestSummarizeTime(unittest.TestCase):
         s = summarize(cases)
         self.assertEqual(s["by_weekday"]["월"]["n"], 1)
         self.assertEqual(s["by_weekday"]["토"]["n"], 1)
-        self.assertEqual(s["by_daypart"]["저녁(18-24)"]["n"], 1)
-        self.assertEqual(s["by_daypart"]["오후(12-18)"]["n"], 1)
+        self.assertEqual(s["by_daypart"]["저녁(17-24)"]["n"], 1)
+        self.assertEqual(s["by_daypart"]["오후(12-17)"]["n"], 1)
 
 
 if __name__ == "__main__":
