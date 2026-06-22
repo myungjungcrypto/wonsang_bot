@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """수집 케이스 통계 출력 — 상장유형/거래소가용성별 실패율·승률.
 
-사용: python scripts/analyze_cases.py [cases.json]   (기본 data/cases_kimchi.json)
+사용: python scripts/analyze_cases.py [cases.json] [최근N]
+  예) python scripts/analyze_cases.py data/cases_kimchi.json 50   # 최근 50건만
 """
 import json
 import os
@@ -14,9 +15,22 @@ from wonsang_bot.collector.analysis import summarize  # noqa: E402
 
 def main() -> None:
     path = sys.argv[1] if len(sys.argv) > 1 else "data/cases_kimchi.json"
+    n_recent = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     cases = data["cases"] if isinstance(data, dict) else data
+
+    # 상장 최신순 정렬 후 최근 N건만(선택)
+    cases = sorted(cases, key=lambda c: c.get("listed_at", ""), reverse=True)
+    if n_recent > 0:
+        cases = cases[:n_recent]
+    if cases:
+        print(f"분석 대상 {len(cases)}건  "
+              f"기간 {cases[-1].get('listed_at', '')[:10]} ~ {cases[0].get('listed_at', '')[:10]}")
+    top = sorted(cases, key=lambda c: c.get("realized_return_pct") or 0, reverse=True)[:5]
+    print("상위 수익률(이상치 점검):",
+          [(c.get("symbol"), round(c.get("realized_return_pct") or 0)) for c in top])
+
     s = summarize(cases)
 
     print(f"\n=== 전체 ({s['overall'].get('n', 0)}건) ===")
