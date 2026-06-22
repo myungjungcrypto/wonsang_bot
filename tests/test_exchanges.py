@@ -2,14 +2,13 @@ import unittest
 
 from wonsang_bot.collector.exchanges import (
     OverseasAggregator,
-    consensus_price,
+    choose_buy_venue,
     parse_binance,
     parse_bitget,
     parse_bybit,
     parse_gate,
     parse_kucoin,
     parse_okx,
-    select_buy_venue,
 )
 
 
@@ -41,60 +40,47 @@ class TestParsers(unittest.TestCase):
         self.assertEqual(parse_bitget(p), [(1700000000.0, 1.25, 444.0)])
 
 
-class TestSelectBuyVenue(unittest.TestCase):
-    def test_highest_liquidity_among_similar(self):
+class TestChooseBuyVenue(unittest.TestCase):
+    def test_cheapest_among_liquidity_survivors(self):
+        # 같은 토큰(신원확정)이면 더 싼 곳이 더 좋은 매수처 → 최저가 채택
         venues = {
-            "binance": {"price": 1.00, "liq": 5000},
-            "gate": {"price": 1.02, "liq": 9000},    # 비슷한 가격 + 최대 유동성 → 선택
-            "mexc": {"price": 0.99, "liq": 100},
+            "binance": {"price": 1.00, "liq": 5000, "kind": "cex"},
+            "gate": {"price": 0.98, "liq": 9000, "kind": "cex"},     # 최저가 → 선택
+            "dex:ethereum": {"price": 0.99, "liq": 80000, "kind": "dex"},
         }
-        price, venue, spread = select_buy_venue(venues)
+        price, venue, _ = choose_buy_venue(venues)
         self.assertEqual(venue, "gate")
-        self.assertAlmostEqual(price, 1.02)
+        self.assertAlmostEqual(price, 0.98)
 
-    def test_excludes_price_outlier_collision(self):
-        # mexc 가 0.37(다른 토큰, 고유동성)이라도 가격 이상치라 제외, 정상가 채택
+    def test_dex_cheaper_is_jackpot_not_filtered(self):
+        # DEX 가 CEX 보다 싸도(컨트랙트로 같은 토큰 확정) 걸러지지 않고 채택(대박)
         venues = {
-            "binance": {"price": 0.17, "liq": 3000},
-            "kucoin": {"price": 0.171, "liq": 1000},
-            "mexc": {"price": 0.37, "liq": 99999},   # 충돌(가격 이상치) → 제외
+            "binance": {"price": 1.00, "liq": 5000, "kind": "cex"},
+            "dex:bsc": {"price": 0.62, "liq": 500000, "kind": "dex"},  # 싸고 유동성 큼
         }
-        price, venue, spread = select_buy_venue(venues)
+        price, venue, _ = choose_buy_venue(venues)
+        self.assertEqual(venue, "dex:bsc")
+        self.assertAlmostEqual(price, 0.62)
+
+    def test_drops_low_liquidity_dex(self):
+        # 유동성 부족 DEX($10k 매수 불가)는 가격 무관 제외 → CEX 채택
+        venues = {
+            "binance": {"price": 1.00, "liq": 5000, "kind": "cex"},
+            "dex:ethereum": {"price": 0.05, "liq": 8000, "kind": "dex"},  # reserve<30k → 제외
+        }
+        price, venue, _ = choose_buy_venue(venues, dex_min_liq=30000)
         self.assertEqual(venue, "binance")
-        self.assertAlmostEqual(price, 0.17)
-        self.assertGreater(spread, 1.0)  # 스프레드 큼 → 충돌 신호
+        self.assertAlmostEqual(price, 1.0)
+
+    def test_dex_only_coin(self):
+        # CEX 어디에도 없고 DEX 풀만(유동성 충분) → DEX 채택
+        venues = {"dex:ethereum": {"price": 0.05, "liq": 50000, "kind": "dex"}}
+        price, venue, _ = choose_buy_venue(venues)
+        self.assertEqual(venue, "dex:ethereum")
+        self.assertAlmostEqual(price, 0.05)
 
     def test_empty(self):
-        self.assertEqual(select_buy_venue({}), (None, None, 0.0))
-
-
-class TestConsensusPrice(unittest.TestCase):
-    def test_stablecoin_cluster_ignores_outlier(self):
-        # CEX 3곳이 ~$1 합의, 충돌 1곳($0.5)은 군집 밖 → 합의가 ~$1
-        venues = {
-            "binance": {"price": 1.00, "liq": 8000},
-            "bybit": {"price": 1.01, "liq": 4000},
-            "okx": {"price": 0.99, "liq": 2000},
-            "mexc": {"price": 0.50, "liq": 9999},   # 다른 USDS(충돌)
-        }
-        self.assertAlmostEqual(consensus_price(venues), 1.0, places=1)
-
-    def test_thin_single_venue_none(self):
-        self.assertIsNone(consensus_price({"kucoin": {"price": 0.1, "liq": 500}}))
-
-    def test_scattered_no_consensus_none(self):
-        # 2곳뿐인데 서로 멀어 군집(≥2) 안 생김 → None
-        venues = {"a": {"price": 0.06, "liq": 100}, "b": {"price": 1.0, "liq": 100}}
-        self.assertIsNone(consensus_price(venues))
-
-    def test_guard_keeps_cex_when_dex_anchor_wrong(self):
-        # USDS 재현: CEX 합의 $1, 엉뚱한 DEX $0.0785. 합의를 anchor 로 쓰면 DEX 제외.
-        cex = {"binance": {"price": 1.0, "liq": 8000}, "bybit": {"price": 1.0, "liq": 4000}}
-        anchor = consensus_price(cex)
-        venues = dict(cex, dex={"price": 0.0785, "liq": 50000})
-        price, venue, _ = select_buy_venue(venues, anchor_price=anchor)
-        self.assertNotEqual(venue, "dex")
-        self.assertAlmostEqual(price, 1.0)
+        self.assertEqual(choose_buy_venue({}), (None, None, 0.0))
 
 
 class _FakeEx:
@@ -107,15 +93,24 @@ class _FakeEx:
 
 
 class TestAggregator(unittest.TestCase):
-    def test_aggregates_and_selects(self):
+    def test_aggregates_and_picks_cheapest(self):
         agg = OverseasAggregator([
-            _FakeEx("binance", (1.00, 5000)),
+            _FakeEx("binance", (0.99, 5000)),   # 최저가 → 선택
             _FakeEx("gate", (1.01, 8000)),
             _FakeEx("okx", None),
         ])
         q = agg.quote("X", 1000)
-        self.assertEqual(q.buy_venue, "gate")
+        self.assertEqual(q.buy_venue, "binance")
         self.assertEqual(set(q.venues), {"binance", "gate"})
+
+    def test_only_restricts_exchanges(self):
+        # only 집합 밖 거래소는 조회 자체를 건너뜀(신원검증된 곳만)
+        agg = OverseasAggregator([
+            _FakeEx("binance", (1.00, 5000)),
+            _FakeEx("mexc", (0.37, 99999)),    # 충돌 토큰이지만 only 에 없어 제외
+        ])
+        venues = agg.fetch_venues("X", 1000, only={"binance"})
+        self.assertEqual(set(venues), {"binance"})
 
     def test_no_venue(self):
         q = OverseasAggregator([_FakeEx("binance", None)]).quote("X", 1000)

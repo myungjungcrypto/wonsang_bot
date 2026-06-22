@@ -31,6 +31,17 @@ CG_PLATFORM_TO_CHAIN = {
 CHAIN_TO_CG_PLATFORM = {v: k for k, v in CG_PLATFORM_TO_CHAIN.items()}
 CHAIN_TO_CG_PLATFORM["evm"] = "ethereum"  # 미상 EVM은 이더리움으로 시도
 
+# CoinGecko 티커의 market.identifier → 우리 거래소 이름 (CEX 신원검증용)
+CG_EXCHANGE_TO_OURS = {
+    "binance": "binance",
+    "bybit_spot": "bybit", "bybit": "bybit",
+    "okex": "okx", "okx": "okx",
+    "mxc": "mexc", "mexc": "mexc",
+    "gate": "gate", "gateio": "gate",
+    "kucoin": "kucoin",
+    "bitget": "bitget",
+}
+
 
 def parse_platforms(payload) -> dict[str, str]:
     """CoinGecko 코인 응답 → {our_chain: address} (전체 체인)."""
@@ -49,10 +60,34 @@ def parse_symbol(payload) -> str | None:
     return sym.strip().lower() if isinstance(sym, str) and sym.strip() else None
 
 
+def parse_coin_id(payload) -> str | None:
+    """CoinGecko 코인 응답 → coin id(티커 조회용). 없으면 None."""
+    cid = (payload or {}).get("id") if isinstance(payload, dict) else None
+    return cid if isinstance(cid, str) and cid else None
+
+
+def parse_ticker_exchanges(payload) -> set[str]:
+    """/coins/{id}/tickers 응답 → 이 코인을 상장한 '우리 거래소' 집합.
+
+    같은 티커 다른 토큰(충돌)을 가격이 아니라 신원으로 걸러내는 핵심:
+    코인게코가 이 coin id 의 마켓으로 인정한 거래소만 매수처 후보로 남긴다.
+    """
+    tickers = (payload or {}).get("tickers", []) if isinstance(payload, dict) else []
+    out: set[str] = set()
+    for t in tickers:
+        mid = ((t or {}).get("market") or {}).get("identifier")
+        if isinstance(mid, str):
+            ours = CG_EXCHANGE_TO_OURS.get(mid.strip().lower())
+            if ours:
+                out.add(ours)
+    return out
+
+
 @dataclass(slots=True)
 class ResolvedToken:
     symbol: str | None                       # 코인게코가 식별한 심볼(소문자)
     platforms: dict[str, str] = field(default_factory=dict)  # {chain: address} 전체
+    coin_id: str | None = None               # 코인게코 coin id(티커 조회용)
 
 
 class CoinGeckoTokens:
@@ -85,8 +120,24 @@ class CoinGeckoTokens:
             return ResolvedToken(None, {chain: address})
         plats = parse_platforms(data)
         plats.setdefault(chain, address)  # 원본 체인도 포함 보장
-        return ResolvedToken(parse_symbol(data), plats)
+        return ResolvedToken(parse_symbol(data), plats, parse_coin_id(data))
 
     def platforms_for(self, chain: str, address: str) -> dict[str, str]:
         """(chain, address) → 같은 코인의 {chain: address} 전체. 실패 시 원본만."""
         return self.resolve(chain, address).platforms
+
+    def exchanges_for(self, coin_id: str | None) -> set[str]:
+        """coin_id 를 실제 상장한 '우리 거래소' 집합. 실패/미상 시 빈 set.
+
+        CEX 매수처를 심볼이 아니라 신원(coin id)으로 한정 → 같은 티커 다른 토큰 배제.
+        """
+        if not coin_id:
+            return set()
+        try:
+            data = self.http.get_json(
+                f"{self.base}/coins/{coin_id}/tickers", headers=self._headers()
+            )
+        except Exception:  # noqa: BLE001
+            log.debug("CoinGecko 티커 조회 실패 %s", coin_id, exc_info=True)
+            return set()
+        return parse_ticker_exchanges(data)

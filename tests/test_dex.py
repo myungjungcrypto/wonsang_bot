@@ -1,7 +1,6 @@
 import unittest
 
 from wonsang_bot.collector.dex import parse_ohlcv, parse_pools
-from wonsang_bot.collector.exchanges import select_buy_venue
 
 
 class TestDexParsers(unittest.TestCase):
@@ -26,25 +25,6 @@ class TestDexParsers(unittest.TestCase):
     def test_empty(self):
         self.assertEqual(parse_pools({}), [])
         self.assertEqual(parse_ohlcv(None), [])
-
-
-class TestAnchorSelection(unittest.TestCase):
-    def test_dex_anchor_excludes_cex_collision(self):
-        # DEX(컨트랙트 검증) 0.17 기준 → mexc 0.37(다른 토큰) 제외, 정상가 채택
-        venues = {
-            "mexc": {"price": 0.37, "liq": 99999},   # 충돌(고유동성이라도)
-            "binance": {"price": 0.171, "liq": 2000},
-            "dex": {"price": 0.17, "liq": 50000},
-        }
-        price, venue, _ = select_buy_venue(venues, anchor_price=0.17)
-        self.assertIn(venue, ("dex", "binance"))     # 0.17 근처에서 유동성 최대
-        self.assertLess(price, 0.2)
-
-    def test_dex_only_coin(self):
-        venues = {"dex": {"price": 0.05, "liq": 30000}}
-        price, venue, _ = select_buy_venue(venues, anchor_price=0.05)
-        self.assertEqual(venue, "dex")
-        self.assertAlmostEqual(price, 0.05)
 
 
 if __name__ == "__main__":

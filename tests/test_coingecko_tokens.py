@@ -5,6 +5,7 @@ from wonsang_bot.collector.coingecko import (
     CoinGeckoTokens,
     parse_platforms,
     parse_symbol,
+    parse_ticker_exchanges,
 )
 
 
@@ -83,12 +84,37 @@ class TestResolve(unittest.TestCase):
     def test_pick_right_contract_by_symbol(self):
         # USDS 재현: 공지에 SKY 주소(0xSKY)와 USDS 주소(0xUSDS) 둘 다. 심볼로 USDS 채택.
         http = _FakeHttp({
-            "0xSKY": {"symbol": "SKY", "platforms": {"ethereum": "0xSKY"}},
-            "0xUSDS": {"symbol": "USDS", "platforms": {"ethereum": "0xUSDS"}},
+            "0xSKY": {"id": "sky", "symbol": "SKY", "platforms": {"ethereum": "0xSKY"}},
+            "0xUSDS": {"id": "usds", "symbol": "USDS", "platforms": {"ethereum": "0xUSDS"}},
         })
         cg = CoinGeckoTokens(_Cfg(), http)
         self.assertEqual(cg.resolve("ethereum", "0xSKY").symbol, "sky")
-        self.assertEqual(cg.resolve("ethereum", "0xUSDS").symbol, "usds")
+        r = cg.resolve("ethereum", "0xUSDS")
+        self.assertEqual(r.symbol, "usds")
+        self.assertEqual(r.coin_id, "usds")
+
+
+class TestTickerExchanges(unittest.TestCase):
+    def test_maps_market_identifiers_to_ours(self):
+        payload = {"tickers": [
+            {"market": {"identifier": "binance"}},
+            {"market": {"identifier": "bybit_spot"}},   # → bybit
+            {"market": {"identifier": "mxc"}},          # → mexc
+            {"market": {"identifier": "okex"}},         # → okx
+            {"market": {"identifier": "unknown_dex"}},  # 매핑 없음 → 무시
+        ]}
+        self.assertEqual(parse_ticker_exchanges(payload),
+                         {"binance", "bybit", "mexc", "okx"})
+
+    def test_empty(self):
+        self.assertEqual(parse_ticker_exchanges({}), set())
+        self.assertEqual(parse_ticker_exchanges(None), set())
+
+    def test_exchanges_for_uses_tickers(self):
+        http = _FakeHttp({"usds": {"tickers": [{"market": {"identifier": "binance"}}]}})
+        cg = CoinGeckoTokens(_Cfg(), http)
+        self.assertEqual(cg.exchanges_for("usds"), {"binance"})
+        self.assertEqual(cg.exchanges_for(None), set())
 
 
 if __name__ == "__main__":

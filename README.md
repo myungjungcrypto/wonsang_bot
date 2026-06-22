@@ -65,15 +65,16 @@ pm2 logs wonsang-bot
 
 **1) 수집** (망 허용 환경 / 서울 IP + 공지 프록시 필요):
 
-⚠️ 업비트 공지 API(`api-manager.upbit.com`)는 Cloudflare로 DC IP 차단 → **집 프록시 필요**([`docs/PROXY_SETUP.md`](docs/PROXY_SETUP.md)). 캔들(`api.upbit.com`)·바이낸스는 직접 접근.
+⚠️ 업비트 공지 API(`api-manager.upbit.com`)는 Cloudflare로 DC IP 차단 → **집 프록시 필요**([`docs/PROXY_SETUP.md`](docs/PROXY_SETUP.md)). 캔들(`api.upbit.com`)·해외 거래소·DEX는 직접 접근.
 
 **권장 — 김프(따리) 모델** (`collect_kimchi_cases.py`):
 ```bash
 COLLECT_LIMIT=20 python scripts/collect_kimchi_cases.py        # 먼저 20개 테스트
 python scripts/collect_kimchi_cases.py data/cases_kimchi.json  # 전체
 ```
-- **매수: 공지 +5분 해외(바이낸스 USDT)** → **매도: 업비트 상장 오픈(첫 캔들 KRW)**, 환율은 업비트 KRW-USDT.
-- 공지(프록시) + 업비트 캔들 + 바이낸스 + KRW-USDT 환율을 조합한 **실제 따리 수익률**.
+- **매수: 공지 +5분 해외** → **매도: 업비트 상장 오픈(첫 캔들 KRW)**, 환율은 업비트 KRW-USDT.
+- 매수처는 **신원이 같은 토큰**을 CEX·DEX 전체에서 찾고(가격 아님 — CEX는 코인게코 티커, DEX는 컨트랙트로 신원 확정 + 브릿지 가능한 타 체인 포함), **유동성 적은 곳은 제거**한 뒤 **남은 구매처 중 최저가**로 매수(같은 토큰이면 싼 곳이 곧 이득).
+- 공지(프록시) + 업비트 캔들 + 멀티 CEX/DEX 시세 + KRW-USDT 환율을 조합한 **실제 따리 수익률**.
 - 대안(참고): `collect_upbit_market.py`(마켓목록·상장후 시점매도), `collect_cases.py`(공지·국내 시점매도).
 
 **라벨**: 대성공 ≥25% / 성공 10~25% / 약성공 0~10% / 실패 -10~0% / 큰실패 ≤-10%.

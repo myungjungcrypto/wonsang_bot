@@ -1,14 +1,12 @@
 """멀티 거래소 해외가 + 유동성 조회, 그리고 매수처 선택.
 
-매수가 기준(사용자 원칙): **가격이 비슷한 곳 중 유동성(거래대금)이 가장 큰 곳에서 매수**.
-미래 따리에서 실제로 할 행동과 동일하게 과거를 백필 → 성공확률이 현실적.
+매수가 기준(사용자 원칙): **같은 토큰인지 신원으로 확정 → 유동성 적은 곳 제거 →
+남은 구매처 중 최저가에서 매수.** 같은 토큰이면 싼 곳이 곧 대박이라 가격으로
+거르지 않는다(노이즈는 신원+유동성으로만 거른다).
 
 - 각 거래소 kline 에서 (종가, 호가통화 거래대금)을 뽑음. 파서는 순수 함수(테스트).
-- 가격 이상치(티커 충돌로 다른 토큰)는 중앙값 밴드 밖이라 제외됨.
+- 신원: CEX 는 코인게코 티커(코인 id 의 마켓), DEX 는 컨트랙트 주소로 확정 → 호출부에서.
 - fetch 는 거래소별 격리(개별 실패 무시).
-
-⚠️ 티커 충돌이 '비싼 토큰이 더 유동적'인 경우는 가격밴드로도 못 거를 수 있음
-   → 컨트랙트 기반 매칭/DEX 비교가 완전한 해법(로드맵).
 """
 from __future__ import annotations
 
@@ -69,56 +67,32 @@ def parse_bitget(p):   # data: [ts,o,h,l,c,baseVol,quoteVol,...]
 
 # ---------------- 매수처 선택 (순수) ----------------
 
-def consensus_price(
-    venues: dict[str, dict], band: float = 0.12, min_cluster: int = 2
-) -> Optional[float]:
-    """다수 거래소가 좁은 밴드(±band)로 합의한 가격(군집 대표값). 합의 없으면 None.
-
-    각 가격을 중심으로 ±band 안에 드는 거래소를 세어 가장 큰 군집을 고르고,
-    그 군집이 min_cluster 곳 이상이면 **유동성 가중** 대표가를 돌려준다.
-    스테이블코인·정상상장은 합의가 생기고(→ 그 가격 신뢰), 시세가 얇거나(<2곳)
-    흩어졌으면 None(→ 호출부가 DEX 등 다른 기준을 쓰게).
-
-    용도: 교차체인 DEX가 엉뚱한 풀에서 이상가를 가져와도, CEX 합의가 있으면
-    그걸 anchor 로 삼아 정상 CEX 들이 밴드 밖으로 버려지는 사고를 막는다.
-    """
-    items = [(d["price"], d.get("liq", 0.0) or 0.0) for d in venues.values()
-             if d.get("price") and d["price"] > 0]
-    if len(items) < min_cluster:
-        return None
-    best: list[tuple[float, float]] = []
-    for center, _ in items:
-        cluster = [t for t in items if abs(t[0] - center) / center <= band]
-        if (len(cluster) > len(best)
-                or (len(cluster) == len(best)
-                    and sum(l for _, l in cluster) > sum(l for _, l in best))):
-            best = cluster
-    if len(best) < min_cluster:
-        return None
-    liq_sum = sum(l for _, l in best)
-    if liq_sum > 0:
-        return sum(p * l for p, l in best) / liq_sum          # 유동성 가중 합의가
-    return sorted(p for p, _ in best)[len(best) // 2]          # 유동성 0이면 중앙값
-
-
-def select_buy_venue(
-    venues: dict[str, dict], band: float = 0.12, anchor_price: Optional[float] = None
+def choose_buy_venue(
+    venues: dict[str, dict], dex_min_liq: float = 30000.0, cex_min_liq: float = 0.0
 ) -> tuple[Optional[float], Optional[str], float]:
-    """기준가(±band) 근처 거래소 중 유동성 최대 → (price, venue, price_spread).
+    """유동성 컷을 통과한 구매처 중 **최저가** → (price, venue, price_spread).
 
-    anchor_price 가 주어지면(컨트랙트 검증된 DEX 가격) 그것을 기준 → 티커충돌 제거.
-    없으면 중앙값 기준.
+    노이즈는 **가격이 아니라 신원+유동성**으로 거른다(신원은 호출 전에 확정):
+    - DEX(컨트랙트로 같은 토큰 확정): 풀 reserve >= dex_min_liq 인 것만.
+    - CEX(코인게코 티커로 신원 확정): 거래대금 >= cex_min_liq 인 것만.
+    같은 토큰이면 더 싼 곳이 곧 더 좋은 매수처(대박) → 살아남은 것 중 최저가 채택.
+    venue dict 는 {"price","liq","kind": "cex"|"dex"} 형식.
     """
-    items = [(n, d["price"], d.get("liq", 0.0)) for n, d in venues.items()
-             if d.get("price") and d["price"] > 0]
-    if not items:
+    kept: list[tuple[str, float, float]] = []
+    for name, d in venues.items():
+        price = d.get("price")
+        if not price or price <= 0:
+            continue
+        liq = d.get("liq", 0.0) or 0.0
+        floor = dex_min_liq if d.get("kind") == "dex" else cex_min_liq
+        if liq < floor:
+            continue
+        kept.append((name, price, liq))
+    if not kept:
         return None, None, 0.0
-    prices = sorted(p for _, p, _ in items)
-    ref = anchor_price if (anchor_price and anchor_price > 0) else prices[len(prices) // 2]
+    prices = sorted(p for _, p, _ in kept)
     spread = round(prices[-1] / prices[0] - 1.0, 3) if prices[0] > 0 else 0.0
-    similar = [t for t in items if ref > 0 and abs(t[1] - ref) / ref <= band]
-    pool = similar or items
-    name, price, _ = max(pool, key=lambda t: t[2])  # 유동성 최대
+    name, price, _ = min(kept, key=lambda t: t[1])  # 최저가(같은 토큰이면 싼 게 이득)
     return price, name, spread
 
 
@@ -252,21 +226,36 @@ class OverseasAggregator:
     def __init__(self, exchanges: list[_Exchange]) -> None:
         self.exchanges = exchanges
 
-    def quote(
+    def fetch_venues(
         self, symbol: str, ts: float, pad_sec: float = 900,
-        extra_venues: Optional[dict[str, dict]] = None,
-        anchor_price: Optional[float] = None,
-    ) -> Quote:
-        """CEX 시세 집계 + extra_venues(예: DEX) 병합 → 매수처 선택.
-        anchor_price(컨트랙트 검증 DEX가)가 있으면 그 기준으로 충돌 제거."""
+        only: Optional[set[str]] = None,
+    ) -> dict[str, dict]:
+        """CEX 시세 집계 → {name: {price, liq, kind:'cex'}}.
+
+        only 가 주어지면(코인게코 티커로 검증된 거래소 집합) 그 거래소만 조회 →
+        같은 티커 다른 토큰(충돌) 배제 + 불필요한 호출 절감. None 이면 전체 조회.
+        """
         venues: dict[str, dict] = {}
         for ex in self.exchanges:
+            if only is not None and ex.name not in only:
+                continue
             q = ex.quote_at(symbol, ts, pad_sec)
             if q:
-                venues[ex.name] = {"price": round(q[0], 8), "liq": round(q[1], 2)}
+                venues[ex.name] = {"price": round(q[0], 8), "liq": round(q[1], 2),
+                                   "kind": "cex"}
+        return venues
+
+    def quote(
+        self, symbol: str, ts: float, pad_sec: float = 900,
+        only: Optional[set[str]] = None,
+        extra_venues: Optional[dict[str, dict]] = None,
+        dex_min_liq: float = 30000.0, cex_min_liq: float = 0.0,
+    ) -> Quote:
+        """CEX 집계 + extra_venues(예: DEX) 병합 → 유동성 컷 통과분 중 최저가."""
+        venues = self.fetch_venues(symbol, ts, pad_sec, only)
         if extra_venues:
             venues.update(extra_venues)
-        price, venue, spread = select_buy_venue(venues, anchor_price=anchor_price)
+        price, venue, spread = choose_buy_venue(venues, dex_min_liq, cex_min_liq)
         return Quote(buy_price=price, buy_venue=venue, price_spread=spread, venues=venues)
 
 

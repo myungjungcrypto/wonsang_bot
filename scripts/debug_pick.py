@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""컨트랙트 선별 + 매수처 산정 빠른 점검 (공지 재수집 없이).
+"""구매처 탐색 + 매수처 산정 빠른 점검 (공지 재수집 없이).
 
-수집기의 DEX 보강 로직(심볼로 올바른 컨트랙트 선택 → 체인별 DEX → 합의 anchor)을
-그대로 재현해, 특정 심볼·컨트랙트가 어떻게 매수처/가격으로 귀결되는지 즉시 확인.
+수집기와 동일한 로직(심볼로 올바른 컨트랙트 선택 → CEX 신원검증(코인게코 티커) →
+체인별 DEX → 유동성 컷 → 최저가)을 재현해, 특정 심볼·컨트랙트가 어떻게
+매수처/가격으로 귀결되는지 즉시 확인.
 
 사용:
     # 기본: USDS 두 컨트랙트(SKY 0x5607.. / USDS 0xdC03..) 재현
@@ -19,10 +20,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from wonsang_bot.collector.coingecko import CoinGeckoTokens  # noqa: E402
 from wonsang_bot.collector.dex import GeckoTerminalDEX  # noqa: E402
 from wonsang_bot.collector.exchanges import (  # noqa: E402
-    Quote,
     build_overseas_aggregator,
-    consensus_price,
-    select_buy_venue,
+    choose_buy_venue,
 )
 from wonsang_bot.config import Config  # noqa: E402
 from wonsang_bot.httpclient import HttpClient  # noqa: E402
@@ -65,45 +64,51 @@ def main() -> None:
             user_agent=config.request_user_agent, min_interval=2.0, max_retries=3, backoff=5.0))
 
     print(f"심볼={symbol}  ts={int(ts)}  컨트랙트 {len(contracts)}개")
-    quote = overseas.quote(symbol, ts)
-    print(f"CEX venues: {quote.venues}")
-    print(f"CEX 합의가(consensus): {consensus_price(quote.venues)}")
 
-    # --- 수집기와 동일한 컨트랙트 선별 ---
-    chain_addrs = None
+    # (1) 신원 확정: 상장심볼과 같은 컨트랙트 선별
+    resolved = None
     identified = False
     if cg is not None:
         for ch, ad in contracts:
             r = cg.resolve(ch, ad)
             mark = "  ← 채택" if (r.symbol == symbol.lower()) else ""
-            print(f"  {ch}:{ad}  symbol={r.symbol}  chains={list(r.platforms)}{mark}")
+            print(f"  {ch}:{ad}  symbol={r.symbol} id={r.coin_id} "
+                  f"chains={list(r.platforms)}{mark}")
             if r.symbol:
                 identified = True
-                if r.symbol == symbol.lower() and chain_addrs is None:
-                    chain_addrs = r.platforms
-    if chain_addrs is None and not identified:
-        c0 = contracts[0]
-        chain_addrs = {c0[0]: c0[1]}
-        print("  (코인게코 미식별 → 첫 주소 best-effort)")
-    if chain_addrs is None:
-        print("  ⚠️ 상장심볼과 일치하는 컨트랙트 없음 → DEX 보강 스킵")
+                if r.symbol == symbol.lower() and resolved is None:
+                    resolved = r
 
-    best = None
-    for ch, ad in (chain_addrs or {}).items():
+    # (2) CEX: 코인게코 티커로 검증된 거래소만
+    if resolved is not None:
+        cex_only = cg.exchanges_for(resolved.coin_id)
+        print(f"  코인게코 검증 거래소(CEX): {cex_only or '없음'}")
+        venues = overseas.fetch_venues(symbol, ts, only=cex_only)
+        chain_addrs = dict(resolved.platforms)
+    elif cg is None:
+        venues = overseas.fetch_venues(symbol, ts)
+        chain_addrs = {contracts[0][0]: contracts[0][1]} if contracts else {}
+    elif identified:
+        print("  ⚠️ 상장심볼과 일치하는 컨트랙트 없음(다른 토큰) → 매수처 없음")
+        venues, chain_addrs = {}, {}
+    else:
+        venues = overseas.fetch_venues(symbol, ts)
+        chain_addrs = {contracts[0][0]: contracts[0][1]} if contracts else {}
+        print("  (코인게코 미식별 → 첫 주소 DEX + 심볼 CEX best-effort)")
+    print(f"  CEX venues: {venues}")
+
+    # (3) DEX: 전체 체인 풀
+    for ch, ad in chain_addrs.items():
         dq = dex.quote_at(ch, ad, ts)
         ok = dq and dq[1] >= dex_min_liq
         print(f"  DEX {ch}:{ad} → {dq}  {'유동성OK' if ok else '제외'}")
-        if ok and (best is None or dq[1] > best[1]):
-            best = dq
+        if dq:
+            venues[f"dex:{ch}"] = {"price": round(dq[0], 8), "liq": round(dq[1], 2),
+                                   "kind": "dex"}
 
-    if best:
-        venues = dict(quote.venues)
-        venues["dex"] = {"price": round(best[0], 8), "liq": round(best[1], 2)}
-        anchor = consensus_price(quote.venues) or best[0]
-        p, v, sp = select_buy_venue(venues, anchor_price=anchor)
-        quote = Quote(buy_price=p, buy_venue=v, price_spread=sp, venues=venues)
-    print(f"\n=> buy_venue={quote.buy_venue}  usd_buy={quote.buy_price}  "
-          f"spread={quote.price_spread}")
+    # (4) 유동성 컷 → 최저가
+    p, v, sp = choose_buy_venue(venues, dex_min_liq=dex_min_liq)
+    print(f"\n=> buy_venue={v}  usd_buy={p}  spread={sp}")
 
 
 if __name__ == "__main__":

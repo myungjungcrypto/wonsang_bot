@@ -32,8 +32,7 @@ from wonsang_bot.collector.dex import GeckoTerminalDEX  # noqa: E402
 from wonsang_bot.collector.exchanges import (  # noqa: E402
     Quote,
     build_overseas_aggregator,
-    consensus_price,
-    select_buy_venue,
+    choose_buy_venue,
 )
 from wonsang_bot.collector.kimchi import kimchi_return_pct  # noqa: E402
 from wonsang_bot.collector.upbit_market import UpbitMarketBackfiller  # noqa: E402
@@ -120,47 +119,52 @@ def main() -> None:
                 if listing_ts is None:
                     log.info("스킵 %s: 업비트 KRW 마켓 없음(상장폐지/개명)", symbol)
                     continue
-                quote = overseas.quote(symbol, announce_ts + entry_offset)
-                # CEX 불충분(가격없음/1곳뿐/스프레드 큼=충돌의심)일 때만 DEX 보강
-                used_dex = False
-                if contracts and (quote.buy_price is None or len(quote.venues) < 2
-                                  or quote.price_spread > 0.15):
-                    # 공지 본문엔 여러 토큰 주소가 섞일 수 있음(USDS 공지에 SKY 주소까지).
-                    # 코인게코 심볼이 상장 심볼과 같은 컨트랙트를 고른다.
-                    # 신원이 확인됐는데(=심볼 식별) 일치가 없으면 → 다른 토큰이므로 DEX 보강 스킵.
-                    chain_addrs: dict[str, str] | None = None
-                    identified = False
-                    if cg_tokens is not None:
-                        for c in contracts:
-                            r = cg_tokens.resolve(c.chain, c.address)
-                            if r.symbol:
-                                identified = True
-                                if r.symbol == symbol.lower():
-                                    chain_addrs = r.platforms
-                                    break
-                    if chain_addrs is None and not identified:
-                        c0 = contracts[0]  # 코인게코가 못 알아본 신규 토큰 → 첫 주소 best-effort
-                        chain_addrs = {c0.chain: c0.address}
-                    if chain_addrs is None:
-                        log.info("DEX보강 스킵 %s: 본문 컨트랙트가 상장심볼과 불일치(다른 토큰)",
-                                 symbol)
-                    best = None  # (price, liq)
-                    for ch, ad in (chain_addrs or {}).items():
-                        dq = dex.quote_at(ch, ad, announce_ts + entry_offset)
-                        if dq and dq[1] >= dex_min_liq and (best is None or dq[1] > best[1]):
-                            best = dq
-                    if best:  # 실매수 가능 유동성(>=min_liq) 풀
-                        venues = dict(quote.venues)
-                        venues["dex"] = {"price": round(best[0], 8), "liq": round(best[1], 2)}
-                        # CEX 합의(≥2곳 군집)가 있으면 그걸 anchor → DEX 가 엉뚱해도 무시
-                        # (USDS 같은 스테이블 보호). 없으면(얇음/흩어짐) DEX anchor(IRYS: 진짜 풀).
-                        anchor = consensus_price(quote.venues) or best[0]
-                        p, v, sp = select_buy_venue(venues, anchor_price=anchor)
-                        quote = Quote(buy_price=p, buy_venue=v, price_spread=sp, venues=venues)
-                        used_dex = (v == "dex")
-                usd_buy = quote.buy_price  # 기준가 근처 중 유동성 최대(CEX+DEX)
+                buy_ts = announce_ts + entry_offset
+                # --- 구매처 전부 탐색(CEX+DEX) → 유동성 컷 → 최저가 ---
+                # (1) 신원 확정: 공지 컨트랙트 중 상장심볼과 같은 토큰 → coin_id + 전체체인 주소.
+                #     본문엔 여러 토큰 주소가 섞일 수 있음(USDS 공지에 SKY 주소까지).
+                resolved = None
+                identified = False
+                if cg_tokens is not None:
+                    for c in contracts:
+                        r = cg_tokens.resolve(c.chain, c.address)
+                        if r.symbol:
+                            identified = True
+                            if r.symbol == symbol.lower():
+                                resolved = r
+                                break
+                # (2) CEX: 코인게코 티커로 '이 코인을 실제 상장한 거래소'만(충돌 토큰 배제).
+                if resolved is not None:
+                    cex_only = cg_tokens.exchanges_for(resolved.coin_id)
+                    venues = overseas.fetch_venues(symbol, buy_ts, only=cex_only)
+                    chain_addrs = dict(resolved.platforms)
+                elif cg_tokens is None:
+                    venues = overseas.fetch_venues(symbol, buy_ts)  # 심볼 신뢰(충돌위험)
+                    chain_addrs = ({contracts[0].chain: contracts[0].address}
+                                   if contracts else {})
+                elif identified:
+                    # 신원 확인됐는데 상장심볼과 불일치 → 다른 토큰 → 신뢰 불가(스킵 유도)
+                    log.info("스킵 %s: 공지 컨트랙트가 상장심볼과 불일치(다른 토큰)", symbol)
+                    venues, chain_addrs = {}, {}
+                else:
+                    # 코인게코가 못 알아본 신규 토큰 → 첫 주소 DEX + 심볼 CEX best-effort
+                    venues = overseas.fetch_venues(symbol, buy_ts)
+                    chain_addrs = ({contracts[0].chain: contracts[0].address}
+                                   if contracts else {})
+                # (3) DEX: 같은 토큰의 전체 체인 풀(브릿지 가능=같은 토큰) → 체인별 구매처.
+                for ch, ad in chain_addrs.items():
+                    dq = dex.quote_at(ch, ad, buy_ts)
+                    if dq:
+                        venues[f"dex:{ch}"] = {"price": round(dq[0], 8),
+                                               "liq": round(dq[1], 2), "kind": "dex"}
+                # (4) 유동성 컷(DEX reserve>=min_liq) 통과분 중 최저가.
+                p, v, sp = choose_buy_venue(venues, dex_min_liq=dex_min_liq)
+                quote = Quote(buy_price=p, buy_venue=v, price_spread=sp, venues=venues)
+                used_dex = bool(v and v.startswith("dex"))
+                usd_buy = quote.buy_price  # 유동성 통과 구매처 중 최저가
                 if usd_buy is None:
-                    log.info("스킵 %s: CEX·DEX 어디에도 없음(TGE 동시상장 의심)", symbol)
+                    log.info("스킵 %s: 매수 가능 구매처 없음(유동성 부족/TGE 동시상장 의심)",
+                             symbol)
                     continue
                 usdt_krw = upbit.price_at("KRW-USDT", listing_ts)
                 if usdt_krw is None:
