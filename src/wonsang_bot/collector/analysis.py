@@ -7,12 +7,35 @@
 from __future__ import annotations
 
 import statistics
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..predictor.labeling import grade_from_return
 
 WIN_PCT = 0.0    # 승리 기준: 0% 이상(약성공+성공+대성공)
 FAIL_PCT = 0.0   # 실패 기준: 0% 미만
+
+KST = timezone(timedelta(hours=9))
+_WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def _when(case: dict) -> tuple[str | None, str | None]:
+    """케이스 상장시각(listed_at) → (요일, 시간대 블록) KST. 파싱 실패 시 (None, None)."""
+    s = case.get("listed_at")
+    if not s:
+        return None, None
+    try:
+        dt = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except ValueError:
+        return None, None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    dt = dt.astimezone(KST)
+    wd = _WEEKDAYS[dt.weekday()]
+    h = dt.hour
+    part = ("심야(0-6)" if h < 6 else "오전(6-12)" if h < 12
+            else "오후(12-18)" if h < 18 else "저녁(18-24)")
+    return wd, part
 
 
 def _stats(rets: list[float]) -> dict[str, Any]:
@@ -37,6 +60,9 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
     by_venue: dict[str, list[float]] = {"1개소": [], "2-3개소": [], "4+개소": []}
     by_bithumb: dict[str, list[float]] = {"빗썸선상장": [], "빗썸미상장": [], "미상": []}
     by_binance: dict[str, list[float]] = {"바이낸스선상장": [], "바이낸스미상장": [], "미상": []}
+    by_weekday: dict[str, list[float]] = {d: [] for d in _WEEKDAYS}
+    by_daypart: dict[str, list[float]] = {
+        "심야(0-6)": [], "오전(6-12)": [], "오후(12-18)": [], "저녁(18-24)": []}
     grades: dict[str, int] = {}
 
     for c in cases:
@@ -44,6 +70,12 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
         if r is None:
             continue
         rets_all.append(r)
+
+        wd, part = _when(c)
+        if wd:
+            by_weekday[wd].append(r)
+        if part:
+            by_daypart[part].append(r)
 
         pre = c.get("pre_listed")
         key = "KRW만추가(기존코인)" if pre is True else ("신규전체상장" if pre is False else "미상")
@@ -72,4 +104,6 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
         "by_venue_count": {k: _stats(v) for k, v in by_venue.items()},
         "by_bithumb": {k: _stats(v) for k, v in by_bithumb.items()},
         "by_binance": {k: _stats(v) for k, v in by_binance.items()},
+        "by_weekday": {k: _stats(v) for k, v in by_weekday.items()},
+        "by_daypart": {k: _stats(v) for k, v in by_daypart.items()},
     }
