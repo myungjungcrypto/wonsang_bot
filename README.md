@@ -76,6 +76,7 @@ python scripts/collect_kimchi_cases.py data/cases_kimchi.json                   
 ```
 - 공지는 newest-first → `COLLECT_LIMIT=N`은 **최근 N건**만(가장 느린 캔들/CEX/DEX/코인게코 호출이 N건으로 제한). 분석도 보통 최근 50건 기준이라 `COLLECT_LIMIT=50`이면 충분.
 - `COLLECT_APPEND=1`은 기존 파일의 이미 수집한 종목을 건너뛰고 **새 상장만 추가**(반복 실행이 빠름).
+- **속도(429 회피)**: 과거데이터(캔들·컨트랙트·DEX)는 `data/.httpcache`에 디스크 캐시 → **재실행은 즉시**(끄려면 `COLLECT_CACHE_DIR=off`). 첫 실행의 CoinGecko 429가 심하면 무료 **Demo 키**(`COINGECKO_API_KEY`, ~30/min)를 넣으면 거의 사라짐. 간격은 `COLLECT_CG_INTERVAL`/`COLLECT_DEX_INTERVAL`로 조절.
 - **매수: 공지 +5분 해외** → **매도: 업비트 상장 오픈(첫 캔들 KRW)**, 환율은 업비트 KRW-USDT.
 - 매수처는 **신원이 같은 토큰**을 CEX·DEX 전체에서 찾고(가격 아님 — CEX는 코인게코 티커, DEX는 컨트랙트로 신원 확정 + 브릿지 가능한 타 체인 포함), **유동성 적은 곳은 제거**한 뒤 **남은 구매처 중 최저가**로 매수(같은 토큰이면 싼 곳이 곧 이득).
 - 공지(프록시) + 업비트 캔들 + 멀티 CEX/DEX 시세 + KRW-USDT 환율을 조합한 **실제 따리 수익률**.

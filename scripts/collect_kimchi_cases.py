@@ -69,34 +69,42 @@ def main() -> None:
     config = Config.load()
     setup_logging(config.log_level)
 
+    # 불변 과거데이터(캔들·컨트랙트·DEX OHLCV) 디스크 캐시 → 재실행 시 즉시(429 회피).
+    cache_dir = os.environ.get("COLLECT_CACHE_DIR", "data/.httpcache")
+    if cache_dir.lower() in ("", "0", "off", "none"):
+        cache_dir = None
+
     # 공지: 프록시(Cloudflare 우회). 업비트/바이낸스: 직접 + 레이트리밋 throttle.
     http_proxy = HttpClient(timeout=config.http_timeout_sec, proxy=config.http_proxy,
                             user_agent=config.request_user_agent,
                             min_interval=0.5, max_retries=3)
-    # 업비트 quotation 한도 ~10req/s → 0.2s 간격(5req/s) + 429 백오프
+    # 업비트 quotation 한도 ~10req/s → 0.2s 간격(5req/s) + 429 백오프 (+캐시)
     http_upbit = HttpClient(timeout=config.http_timeout_sec, proxy=None,
                             user_agent=config.request_user_agent,
-                            min_interval=0.2, max_retries=5)
+                            min_interval=0.2, max_retries=5, cache_dir=cache_dir)
     upbit = UpbitMarketBackfiller(http_upbit)
     # 빗썸(v1 업비트호환) — 기상장 여부 판정용 별도 client(레이트리밋 격리)
     http_bithumb = HttpClient(timeout=config.http_timeout_sec, proxy=None,
                               user_agent=config.request_user_agent,
-                              min_interval=0.2, max_retries=3)
+                              min_interval=0.2, max_retries=3, cache_dir=cache_dir)
     bithumb = UpbitMarketBackfiller(http_bithumb, base_url=BITHUMB_API)
     overseas = build_overseas_aggregator(config)  # 7개 CEX 집계(거래소별 독립 client)
     src = UpbitSource(config.upbit_announcements_url, http_proxy)  # 공지 본문(컨트랙트)
-    # DEX: Geckoterminal 무료 ~30/min → 간격 넉넉히(env로 조정) + 429 긴 백오프
+    # DEX: Geckoterminal 무료 ~30/min → 간격 넉넉히(env로 조정) + 429 긴 백오프 (+캐시)
     dex_interval = float(os.environ.get("COLLECT_DEX_INTERVAL", "4.0"))
     http_dex = HttpClient(timeout=config.http_timeout_sec, proxy=None,
                           user_agent=config.request_user_agent,
-                          min_interval=dex_interval, max_retries=4, backoff=5.0)
+                          min_interval=dex_interval, max_retries=4, backoff=5.0,
+                          cache_dir=cache_dir)
     dex = GeckoTerminalDEX(http_dex)
-    # 같은 코인의 전체 체인 컨트랙트 해소(체인마다 주소 다름) — coingecko
+    # 같은 코인의 전체 체인 컨트랙트 해소 + CEX 신원(티커) — coingecko (+캐시)
     cg_tokens = None
     if config.coingecko_enabled:
+        cg_interval = float(os.environ.get("COLLECT_CG_INTERVAL", "2.0"))
         http_cg = HttpClient(timeout=config.http_timeout_sec, proxy=None,
                              user_agent=config.request_user_agent,
-                             min_interval=2.0, max_retries=3, backoff=5.0)
+                             min_interval=cg_interval, max_retries=3, backoff=5.0,
+                             cache_dir=cache_dir)
         cg_tokens = CoinGeckoTokens(config, http_cg)
     else:
         log.warning("COINGECKO_ENABLED=false → 체인간 컨트랙트 해소 불가(공지 체인만 DEX 조회)")
@@ -168,9 +176,9 @@ def main() -> None:
                                 resolved = r
                                 break
                 # (2) CEX: 코인게코 티커로 '이 코인을 실제 상장한 거래소'만(충돌 토큰 배제).
+                #     티커는 resolve 응답에 같이 옴 → 별도 호출 없음.
                 if resolved is not None:
-                    cex_only = cg_tokens.exchanges_for(resolved.coin_id)
-                    venues = overseas.fetch_venues(symbol, buy_ts, only=cex_only)
+                    venues = overseas.fetch_venues(symbol, buy_ts, only=resolved.exchanges)
                     chain_addrs = dict(resolved.platforms)
                 elif cg_tokens is None:
                     venues = overseas.fetch_venues(symbol, buy_ts)  # 심볼 신뢰(충돌위험)

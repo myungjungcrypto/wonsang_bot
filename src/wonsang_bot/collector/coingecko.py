@@ -87,7 +87,8 @@ def parse_ticker_exchanges(payload) -> set[str]:
 class ResolvedToken:
     symbol: str | None                       # 코인게코가 식별한 심볼(소문자)
     platforms: dict[str, str] = field(default_factory=dict)  # {chain: address} 전체
-    coin_id: str | None = None               # 코인게코 coin id(티커 조회용)
+    coin_id: str | None = None               # 코인게코 coin id
+    exchanges: set[str] = field(default_factory=set)  # 이 코인을 상장한 우리 거래소
 
 
 class CoinGeckoTokens:
@@ -97,16 +98,20 @@ class CoinGeckoTokens:
         self.base = config.coingecko_base_url.rstrip("/")
 
     def _headers(self) -> dict[str, str]:
-        if self.config.coingecko_api_key:
-            return {"x-cg-pro-api-key": self.config.coingecko_api_key}
-        return {}
+        key = self.config.coingecko_api_key
+        if not key:
+            return {}
+        # Pro 는 pro-api 도메인 + x-cg-pro-api-key, 무료 Demo 는 공개 도메인 + x-cg-demo-api-key.
+        if "pro-api.coingecko.com" in self.base:
+            return {"x-cg-pro-api-key": key}
+        return {"x-cg-demo-api-key": key}
 
     def resolve(self, chain: str, address: str) -> ResolvedToken:
-        """(chain, address) → 코인 심볼 + 같은 코인의 전체 체인 주소.
+        """(chain, address) → 코인 심볼 + 전체 체인 주소 + coin_id + 상장 거래소.
 
         조회 실패/미식별이면 symbol=None, platforms={원본}. 공지 본문에 여러 토큰
-        주소가 섞였을 때(예: USDS 공지에 SKY 주소까지) 심볼로 진짜 상장코인을
-        가려내는 데 쓴다.
+        주소가 섞였을 때(예: USDS 공지에 SKY 주소까지) 심볼로 진짜 상장코인을 고르고,
+        같은 응답의 tickers 로 CEX 신원까지 한 번에 얻는다(별도 호출 절약).
         """
         plat = CHAIN_TO_CG_PLATFORM.get(chain)
         if not plat:
@@ -120,7 +125,8 @@ class CoinGeckoTokens:
             return ResolvedToken(None, {chain: address})
         plats = parse_platforms(data)
         plats.setdefault(chain, address)  # 원본 체인도 포함 보장
-        return ResolvedToken(parse_symbol(data), plats, parse_coin_id(data))
+        return ResolvedToken(parse_symbol(data), plats, parse_coin_id(data),
+                             parse_ticker_exchanges(data))
 
     def platforms_for(self, chain: str, address: str) -> dict[str, str]:
         """(chain, address) → 같은 코인의 {chain: address} 전체. 실패 시 원본만."""
