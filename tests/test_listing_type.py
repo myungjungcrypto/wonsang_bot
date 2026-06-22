@@ -14,15 +14,17 @@ def _ctx(pre):
 
 
 class TestListingTypeFeature(unittest.TestCase):
-    def test_pre_listed_low_score(self):
+    def test_pre_listed_neutral_score(self):
+        # 데이터상 KRW만추가는 '실패'가 아니라 '중립(안전·저천장)' → 0.5
         f = ListingTypeFeature(2.0).extract(_ctx(True))
         self.assertTrue(f.available)
-        self.assertLess(f.score, 0.4)
+        self.assertAlmostEqual(f.score, 0.5)
 
-    def test_fresh_high_score(self):
-        f = ListingTypeFeature(2.0).extract(_ctx(False))
-        self.assertTrue(f.available)
-        self.assertGreater(f.score, 0.5)
+    def test_fresh_higher_than_pre_listed(self):
+        fresh = ListingTypeFeature(2.0).extract(_ctx(False))
+        pre = ListingTypeFeature(2.0).extract(_ctx(True))
+        self.assertTrue(fresh.available)
+        self.assertGreater(fresh.score, pre.score)
 
     def test_unknown_unavailable(self):
         f = ListingTypeFeature(2.0).extract(_ctx(None))

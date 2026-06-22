@@ -38,10 +38,11 @@ class TestPredict(unittest.TestCase):
         self.assertIn(pred.grade, GRADES)
         self.assertGreaterEqual(pred.score, 0.0)
         self.assertLessEqual(pred.score, 1.0)
-        self.assertEqual(len(pred.features), 6)
-        # marketcap/social/listing_type(pre_listed=None) 미가용 → 가용 3개(timing/narrative/supply)
-        # conf = (1+1.5+2) / (1+1.5+2+2.5+2.5+1) = 4.5/10.5
-        self.assertAlmostEqual(pred.confidence, 4.5 / 10.5, places=3)
+        self.assertEqual(len(pred.features), 7)
+        # marketcap/social/listing_type(pre_listed=None)/venue_count(미조회) 미가용
+        # → 가용 3개(timing/narrative/supply). conf = (1+1.5+2) / 전체가중합(12.5)
+        # 전체 = 1+1.5+2+1.5(listing_type)+3(venue_count)+2.5+1 = 12.5
+        self.assertAlmostEqual(pred.confidence, 4.5 / 12.5, places=3)
         avail = [f for f in pred.features if f.available]
         self.assertEqual(len(avail), 3)
 

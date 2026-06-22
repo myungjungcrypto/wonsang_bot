@@ -9,6 +9,7 @@ from .narrative import NarrativeFeature
 from .social import SocialFeature
 from .supply import SupplyChokeFeature
 from .timing import TimingFeature
+from .venue_count import VenueCountFeature
 
 
 def build_extractors(config: Config) -> list[FeatureExtractor]:
@@ -18,6 +19,7 @@ def build_extractors(config: Config) -> list[FeatureExtractor]:
         NarrativeFeature(config.w_narrative),
         SupplyChokeFeature(config.w_supply),
         ListingTypeFeature(config.w_listing_type),
+        VenueCountFeature(config.w_venue_count),
         MarketCapFeature(config.w_marketcap),
         SocialFeature(config.w_social),
     ]
@@ -31,6 +33,7 @@ __all__ = [
     "NarrativeFeature",
     "SupplyChokeFeature",
     "ListingTypeFeature",
+    "VenueCountFeature",
     "MarketCapFeature",
     "SocialFeature",
     "build_extractors",

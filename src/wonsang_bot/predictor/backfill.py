@@ -98,6 +98,7 @@ def build_case(
         now=parse_iso(raw.listed_at),
         market_provider=market_provider,
         social_provider=social_provider,
+        extra=dict(raw.meta),   # venue_count 등 구매처 탐색 산출값 → 피처 입력
     )
     feats = [ex.extract(ctx) for ex in extractors]
     features = {f.name: f.score for f in feats if f.available}
