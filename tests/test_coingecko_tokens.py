@@ -2,8 +2,28 @@ import unittest
 
 from wonsang_bot.collector.coingecko import (
     CHAIN_TO_CG_PLATFORM,
+    CoinGeckoTokens,
     parse_platforms,
+    parse_symbol,
 )
+
+
+class _FakeHttp:
+    """주소→payload 매핑으로 get_json 흉내."""
+
+    def __init__(self, by_addr: dict[str, dict]) -> None:
+        self.by_addr = by_addr
+
+    def get_json(self, url, headers=None):
+        for addr, payload in self.by_addr.items():
+            if addr.lower() in url.lower():
+                return payload
+        raise RuntimeError("404")
+
+
+class _Cfg:
+    coingecko_base_url = "https://api.coingecko.com/api/v3"
+    coingecko_api_key = ""
 
 
 class TestParsePlatforms(unittest.TestCase):
@@ -30,6 +50,45 @@ class TestParsePlatforms(unittest.TestCase):
     def test_chain_to_platform_inverse(self):
         self.assertEqual(CHAIN_TO_CG_PLATFORM["bsc"], "binance-smart-chain")
         self.assertEqual(CHAIN_TO_CG_PLATFORM["ethereum"], "ethereum")
+
+
+class TestParseSymbol(unittest.TestCase):
+    def test_lowercases_and_strips(self):
+        self.assertEqual(parse_symbol({"symbol": " USDS "}), "usds")
+
+    def test_missing_none(self):
+        self.assertIsNone(parse_symbol({}))
+        self.assertIsNone(parse_symbol(None))
+        self.assertIsNone(parse_symbol({"symbol": ""}))
+
+
+class TestResolve(unittest.TestCase):
+    def test_resolve_returns_symbol_and_platforms(self):
+        http = _FakeHttp({
+            "0xUSDS": {"symbol": "USDS", "platforms": {"ethereum": "0xUSDS",
+                                                       "solana": "USDSmint"}},
+        })
+        cg = CoinGeckoTokens(_Cfg(), http)
+        r = cg.resolve("ethereum", "0xUSDS")
+        self.assertEqual(r.symbol, "usds")
+        self.assertEqual(r.platforms["ethereum"], "0xUSDS")
+        self.assertEqual(r.platforms["solana"], "USDSmint")
+
+    def test_resolve_failure_symbol_none(self):
+        cg = CoinGeckoTokens(_Cfg(), _FakeHttp({}))
+        r = cg.resolve("ethereum", "0xUNKNOWN")
+        self.assertIsNone(r.symbol)
+        self.assertEqual(r.platforms, {"ethereum": "0xUNKNOWN"})
+
+    def test_pick_right_contract_by_symbol(self):
+        # USDS 재현: 공지에 SKY 주소(0xSKY)와 USDS 주소(0xUSDS) 둘 다. 심볼로 USDS 채택.
+        http = _FakeHttp({
+            "0xSKY": {"symbol": "SKY", "platforms": {"ethereum": "0xSKY"}},
+            "0xUSDS": {"symbol": "USDS", "platforms": {"ethereum": "0xUSDS"}},
+        })
+        cg = CoinGeckoTokens(_Cfg(), http)
+        self.assertEqual(cg.resolve("ethereum", "0xSKY").symbol, "sky")
+        self.assertEqual(cg.resolve("ethereum", "0xUSDS").symbol, "usds")
 
 
 if __name__ == "__main__":

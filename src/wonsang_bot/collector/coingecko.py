@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 
 from ..config import Config
 from ..httpclient import HttpClient
@@ -42,6 +43,18 @@ def parse_platforms(payload) -> dict[str, str]:
     return out
 
 
+def parse_symbol(payload) -> str | None:
+    """CoinGecko 코인 응답 → 심볼(소문자). 없으면 None."""
+    sym = (payload or {}).get("symbol") if isinstance(payload, dict) else None
+    return sym.strip().lower() if isinstance(sym, str) and sym.strip() else None
+
+
+@dataclass(slots=True)
+class ResolvedToken:
+    symbol: str | None                       # 코인게코가 식별한 심볼(소문자)
+    platforms: dict[str, str] = field(default_factory=dict)  # {chain: address} 전체
+
+
 class CoinGeckoTokens:
     def __init__(self, config: Config, http: HttpClient) -> None:
         self.config = config
@@ -53,18 +66,27 @@ class CoinGeckoTokens:
             return {"x-cg-pro-api-key": self.config.coingecko_api_key}
         return {}
 
-    def platforms_for(self, chain: str, address: str) -> dict[str, str]:
-        """(chain, address) → 같은 코인의 {chain: address} 전체. 실패 시 원본만."""
+    def resolve(self, chain: str, address: str) -> ResolvedToken:
+        """(chain, address) → 코인 심볼 + 같은 코인의 전체 체인 주소.
+
+        조회 실패/미식별이면 symbol=None, platforms={원본}. 공지 본문에 여러 토큰
+        주소가 섞였을 때(예: USDS 공지에 SKY 주소까지) 심볼로 진짜 상장코인을
+        가려내는 데 쓴다.
+        """
         plat = CHAIN_TO_CG_PLATFORM.get(chain)
         if not plat:
-            return {chain: address}
+            return ResolvedToken(None, {chain: address})
         try:
             data = self.http.get_json(
                 f"{self.base}/coins/{plat}/contract/{address}", headers=self._headers()
             )
         except Exception:  # noqa: BLE001
             log.debug("CoinGecko 컨트랙트 조회 실패 %s/%s", chain, address, exc_info=True)
-            return {chain: address}
-        out = parse_platforms(data)
-        out.setdefault(chain, address)  # 원본 체인도 포함 보장
-        return out
+            return ResolvedToken(None, {chain: address})
+        plats = parse_platforms(data)
+        plats.setdefault(chain, address)  # 원본 체인도 포함 보장
+        return ResolvedToken(parse_symbol(data), plats)
+
+    def platforms_for(self, chain: str, address: str) -> dict[str, str]:
+        """(chain, address) → 같은 코인의 {chain: address} 전체. 실패 시 원본만."""
+        return self.resolve(chain, address).platforms

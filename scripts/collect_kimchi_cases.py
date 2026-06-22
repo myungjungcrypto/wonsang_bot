@@ -125,13 +125,27 @@ def main() -> None:
                 used_dex = False
                 if contracts and (quote.buy_price is None or len(quote.venues) < 2
                                   or quote.price_spread > 0.15):
-                    c0 = contracts[0]
-                    # 같은 코인의 전체 체인 주소(체인마다 다름) → 가장 유동성 큰 풀 선택
-                    chain_addrs = {c0.chain: c0.address}
+                    # 공지 본문엔 여러 토큰 주소가 섞일 수 있음(USDS 공지에 SKY 주소까지).
+                    # 코인게코 심볼이 상장 심볼과 같은 컨트랙트를 고른다.
+                    # 신원이 확인됐는데(=심볼 식별) 일치가 없으면 → 다른 토큰이므로 DEX 보강 스킵.
+                    chain_addrs: dict[str, str] | None = None
+                    identified = False
                     if cg_tokens is not None:
-                        chain_addrs = cg_tokens.platforms_for(c0.chain, c0.address)
+                        for c in contracts:
+                            r = cg_tokens.resolve(c.chain, c.address)
+                            if r.symbol:
+                                identified = True
+                                if r.symbol == symbol.lower():
+                                    chain_addrs = r.platforms
+                                    break
+                    if chain_addrs is None and not identified:
+                        c0 = contracts[0]  # 코인게코가 못 알아본 신규 토큰 → 첫 주소 best-effort
+                        chain_addrs = {c0.chain: c0.address}
+                    if chain_addrs is None:
+                        log.info("DEX보강 스킵 %s: 본문 컨트랙트가 상장심볼과 불일치(다른 토큰)",
+                                 symbol)
                     best = None  # (price, liq)
-                    for ch, ad in chain_addrs.items():
+                    for ch, ad in (chain_addrs or {}).items():
                         dq = dex.quote_at(ch, ad, announce_ts + entry_offset)
                         if dq and dq[1] >= dex_min_liq and (best is None or dq[1] > best[1]):
                             best = dq
