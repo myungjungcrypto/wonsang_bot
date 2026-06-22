@@ -67,9 +67,13 @@ def parse_ohlcv(payload) -> Series:
 
 
 class GeckoTerminalDEX:
-    def __init__(self, http: HttpClient, base: str = GT_BASE) -> None:
+    def __init__(
+        self, http: HttpClient, base: str = GT_BASE,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         self.http = http
         self.base = base.rstrip("/")
+        self.headers = headers  # CoinGecko 온체인 경유 시 데모/프로 키 헤더
 
     def quote_at(
         self, chain: str, address: str, ts: float, pad_sec: float = 900
@@ -79,9 +83,10 @@ class GeckoTerminalDEX:
         if not net or not address:
             return None
         try:
-            pools = parse_pools(
-                self.http.get_json(f"{self.base}/networks/{net}/tokens/{address}/pools")
-            )
+            pools = parse_pools(self.http.get_json(
+                f"{self.base}/networks/{net}/tokens/{address}/pools",
+                headers=self.headers,
+            ))
             if not pools:
                 return None
             pool_addr, reserve = pools[0]  # 유동성 최대 풀
@@ -89,7 +94,8 @@ class GeckoTerminalDEX:
             ohlcv = parse_ohlcv(self.http.get_json(
                 f"{self.base}/networks/{net}/pools/{pool_addr}/ohlcv/minute"
                 f"?aggregate=1&before_timestamp={int(ts + pad_sec)}"
-                f"&limit=100&currency=usd&token={address}"
+                f"&limit=100&currency=usd&token={address}",
+                headers=self.headers,
             ))
             hit = _price_at(sorted(ohlcv), ts)
             if hit is None or hit[1] <= 0:

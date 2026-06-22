@@ -90,24 +90,44 @@ def main() -> None:
     bithumb = UpbitMarketBackfiller(http_bithumb, base_url=BITHUMB_API)
     overseas = build_overseas_aggregator(config)  # 7개 CEX 집계(거래소별 독립 client)
     src = UpbitSource(config.upbit_announcements_url, http_proxy)  # 공지 본문(컨트랙트)
-    # DEX: Geckoterminal 무료 ~30/min → 간격 넉넉히(env로 조정) + 429 긴 백오프 (+캐시)
-    dex_interval = float(os.environ.get("COLLECT_DEX_INTERVAL", "4.0"))
-    http_dex = HttpClient(timeout=config.http_timeout_sec, proxy=None,
-                          user_agent=config.request_user_agent,
-                          min_interval=dex_interval, max_retries=4, backoff=5.0,
-                          cache_dir=cache_dir)
-    dex = GeckoTerminalDEX(http_dex)
-    # 같은 코인의 전체 체인 컨트랙트 해소 + CEX 신원(티커) — coingecko (+캐시)
+
+    # CoinGecko(컨트랙트·체인·티커) + DEX(Geckoterminal) 설정.
+    # 키가 있으면 DEX 도 CoinGecko 온체인 API로 인증 경유 → 익명 DC-IP throttle 회피.
+    # 이때 컨트랙트·DEX 가 같은 키 쿼터(30/min)를 공유하므로 **한 클라이언트로 묶어** 페이싱.
     cg_tokens = None
-    if config.coingecko_enabled:
-        cg_interval = float(os.environ.get("COLLECT_CG_INTERVAL", "2.0"))
+    dex = None
+    if config.coingecko_enabled and config.coingecko_api_key:
+        cg_interval = float(os.environ.get("COLLECT_CG_INTERVAL", "2.5"))  # ~24/min<30
         http_cg = HttpClient(timeout=config.http_timeout_sec, proxy=None,
                              user_agent=config.request_user_agent,
                              min_interval=cg_interval, max_retries=3, backoff=5.0,
                              cache_dir=cache_dir)
         cg_tokens = CoinGeckoTokens(config, http_cg)
+        onchain_base = config.coingecko_base_url.rstrip("/") + "/onchain"
+        dex_headers = ({"x-cg-pro-api-key": config.coingecko_api_key}
+                       if "pro-api.coingecko.com" in onchain_base
+                       else {"x-cg-demo-api-key": config.coingecko_api_key})
+        dex = GeckoTerminalDEX(http_cg, base=onchain_base, headers=dex_headers)
+        log.info("CoinGecko 키 사용 → 컨트랙트+DEX 인증 경유(공유 페이싱 %.1fs)", cg_interval)
     else:
-        log.warning("COINGECKO_ENABLED=false → 체인간 컨트랙트 해소 불가(공지 체인만 DEX 조회)")
+        # 무키: 공개 Geckoterminal(자체 ~30/min, DC-IP throttle 잦음) + 활성 시 공개 CoinGecko
+        dex_interval = float(os.environ.get("COLLECT_DEX_INTERVAL", "4.0"))
+        http_dex = HttpClient(timeout=config.http_timeout_sec, proxy=None,
+                              user_agent=config.request_user_agent,
+                              min_interval=dex_interval, max_retries=4, backoff=5.0,
+                              cache_dir=cache_dir)
+        dex = GeckoTerminalDEX(http_dex)
+        if config.coingecko_enabled:
+            cg_interval = float(os.environ.get("COLLECT_CG_INTERVAL", "2.0"))
+            http_cg = HttpClient(timeout=config.http_timeout_sec, proxy=None,
+                                 user_agent=config.request_user_agent,
+                                 min_interval=cg_interval, max_retries=3, backoff=5.0,
+                                 cache_dir=cache_dir)
+            cg_tokens = CoinGeckoTokens(config, http_cg)
+            log.warning("CoinGecko 키 없음 → DEX는 공개 Geckoterminal(DC-IP 429 잦음). "
+                        "무료 Demo 키 권장(COINGECKO_API_KEY).")
+        else:
+            log.warning("COINGECKO_ENABLED=false → 체인간 컨트랙트 해소 불가(공지 체인만 DEX 조회)")
 
     anns = fetch_upbit_archive(http_proxy, config.upbit_announcements_url, pages=pages)
     log.info("공지 아카이브 %d건 수신 (pages=%d)", len(anns), pages)
