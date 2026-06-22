@@ -8,7 +8,7 @@ from .config import Config
 from .core.bus import EventBus
 from .core.events import GradePredicted, ListingDetected
 from .detector.service import DetectorService
-from .detector.sources.bithumb import BithumbSource
+from .detector.sources.bithumb import BithumbSource, bithumb_pre_listed
 from .detector.sources.upbit import UpbitSource
 from .httpclient import HttpClient
 from .llm.client import get_llm
@@ -55,7 +55,10 @@ def build_service(config: Config) -> DetectorService:
     if config.bithumb_enabled:
         sources.append(BithumbSource(config.bithumb_announcements_url, http))
 
-    return DetectorService(config, storage, bus, sources, resolver)
+    # 빗썸 기상장 여부(평가 기준) — 어느 소스의 공지든 심볼로 빗썸 KRW 마켓 확인
+    bithumb_checker = (lambda sym: bithumb_pre_listed(http, sym))
+    return DetectorService(config, storage, bus, sources, resolver,
+                           bithumb_checker=bithumb_checker)
 
 
 async def main_async() -> None:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Callable, Optional
 
 from ..config import Config
 from ..core.bus import EventBus
@@ -28,12 +29,14 @@ class DetectorService:
         bus: EventBus,
         sources: list[AnnouncementSource],
         resolver: ContractResolver | None = None,
+        bithumb_checker: Optional[Callable[[str], bool | None]] = None,
     ) -> None:
         self.config = config
         self.storage = storage
         self.bus = bus
         self.sources = sources
         self.resolver = resolver
+        self.bithumb_checker = bithumb_checker   # symbol → 빗썸 기상장 여부
         self._stop = asyncio.Event()
 
     def stop(self) -> None:
@@ -109,13 +112,19 @@ class DetectorService:
         if self.resolver is not None:
             contracts = self.resolver.resolve(parsed.symbols, ann, body)
 
-        # KRW만 추가된 기존 코인 여부(따리 실패 경향 신호)
+        # KRW만 추가된 기존 코인 여부(업비트 BTC/USDT 선상장) + 빗썸 기상장 여부
         pre_listed: bool | None = None
+        pre_listed_bithumb: bool | None = None
         if parsed.symbols:
             try:
                 pre_listed = src.is_pre_listed(parsed.symbols[0])
             except Exception:  # noqa: BLE001
                 pre_listed = None
+            if self.bithumb_checker is not None:
+                try:
+                    pre_listed_bithumb = self.bithumb_checker(parsed.symbols[0])
+                except Exception:  # noqa: BLE001
+                    pre_listed_bithumb = None
 
         ev = ListingDetected(
             source=ann.source,
@@ -129,6 +138,7 @@ class DetectorService:
             published_at=ann.published_at,
             confidence=parsed.confidence,
             pre_listed=pre_listed,
+            pre_listed_bithumb=pre_listed_bithumb,
         )
         self.storage.save_listing(ev)
         log.info(

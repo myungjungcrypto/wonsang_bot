@@ -35,6 +35,7 @@ class RawCase:
     market_cap_usd: Optional[float] = None                # 상장시점 스냅샷(있으면)
     mentions_per_hour: Optional[float] = None             # 상장시점 스냅샷(있으면)
     pre_listed: Optional[bool] = None                     # KRW만 추가(기존 코인) 여부
+    pre_listed_bithumb: Optional[bool] = None             # 빗썸 기상장 여부
     meta: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -51,6 +52,7 @@ class RawCase:
             market_cap_usd=d.get("market_cap_usd"),
             mentions_per_hour=d.get("mentions_per_hour"),
             pre_listed=d.get("pre_listed"),
+            pre_listed_bithumb=d.get("pre_listed_bithumb"),
             meta=dict(d.get("meta", {})),
         )
 
@@ -71,6 +73,7 @@ def raw_to_listing(raw: RawCase) -> ListingDetected:
         contracts=contracts,
         published_at=raw.listed_at or None,
         pre_listed=raw.pre_listed,
+        pre_listed_bithumb=raw.pre_listed_bithumb,
     )
     if raw.listed_at:
         listing.detected_at = raw.listed_at

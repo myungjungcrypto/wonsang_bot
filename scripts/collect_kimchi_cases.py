@@ -35,7 +35,10 @@ from wonsang_bot.collector.exchanges import (  # noqa: E402
     choose_buy_venue,
 )
 from wonsang_bot.collector.kimchi import kimchi_return_pct  # noqa: E402
-from wonsang_bot.collector.upbit_market import UpbitMarketBackfiller  # noqa: E402
+from wonsang_bot.collector.upbit_market import (  # noqa: E402
+    BITHUMB_API,
+    UpbitMarketBackfiller,
+)
 from wonsang_bot.config import Config  # noqa: E402
 from wonsang_bot.detector.contract_extract import extract_contracts_from_text  # noqa: E402
 from wonsang_bot.detector.parser import parse_title  # noqa: E402
@@ -67,6 +70,11 @@ def main() -> None:
                             user_agent=config.request_user_agent,
                             min_interval=0.2, max_retries=5)
     upbit = UpbitMarketBackfiller(http_upbit)
+    # 빗썸(v1 업비트호환) — 기상장 여부 판정용 별도 client(레이트리밋 격리)
+    http_bithumb = HttpClient(timeout=config.http_timeout_sec, proxy=None,
+                              user_agent=config.request_user_agent,
+                              min_interval=0.2, max_retries=3)
+    bithumb = UpbitMarketBackfiller(http_bithumb, base_url=BITHUMB_API)
     overseas = build_overseas_aggregator(config)  # 7개 CEX 집계(거래소별 독립 client)
     src = UpbitSource(config.upbit_announcements_url, http_proxy)  # 공지 본문(컨트랙트)
     # DEX: Geckoterminal 무료 ~30/min → 간격 넉넉히(env로 조정) + 429 긴 백오프
@@ -190,6 +198,15 @@ def main() -> None:
                 except Exception:  # noqa: BLE001 - 없는 마켓은 그냥 신규
                     pass
 
+            # 빗썸 기상장 여부: 공지 1시간 전 빗썸 KRW 마켓 캔들이 있었나
+            pre_listed_bithumb: bool | None
+            try:
+                pre_listed_bithumb = (
+                    bithumb.price_at(f"KRW-{symbol}", announce_ts - 3600) is not None
+                )
+            except Exception:  # noqa: BLE001 - 조회 실패는 미상(None)
+                pre_listed_bithumb = None
+
             cases.append({
                 "id": f"upbit:{symbol}",
                 "symbol": symbol,
@@ -202,6 +219,7 @@ def main() -> None:
                 "market_cap_usd": None,
                 "mentions_per_hour": None,
                 "pre_listed": pre_listed,
+                "pre_listed_bithumb": pre_listed_bithumb,
                 "meta": {
                     "announce_ts": announce_ts,
                     "listing_ts": listing_ts,

@@ -10,7 +10,9 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote
 
 from ...core.events import Announcement
 from ...httpclient import HttpClient
@@ -20,6 +22,24 @@ log = logging.getLogger(__name__)
 
 # 공지 상세 URL 템플릿(라이브 확인 후 조정)
 NOTICE_URL_TMPL = "https://feed.bithumb.com/notice/{id}"
+# 빗썸 v1 은 업비트 호환 캔들 API
+BITHUMB_CANDLES_URL = "https://api.bithumb.com/v1/candles/days"
+
+
+def bithumb_pre_listed(http: HttpClient, symbol: str) -> bool | None:
+    """빗썸 KRW 마켓 일봉이 하루 전 이미 있었나 → 빗썸 기상장 여부.
+
+    True=빗썸 선상장, False=없음(신규), None=조회 실패(미상).
+    (빗썸 v1 은 업비트 호환 — 라이브 재검증 필요)
+    """
+    to = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+    url = f"{BITHUMB_CANDLES_URL}?market=KRW-{symbol}&count=1&to={quote(to)}"
+    try:
+        rows = http.get_json(url)
+    except Exception:  # noqa: BLE001 - 없는 마켓/네트워크 실패는 미상
+        log.debug("빗썸 기상장 조회 실패 %s", symbol, exc_info=True)
+        return None
+    return bool(isinstance(rows, list) and rows)
 
 
 def _first(item: dict, keys: tuple[str, ...]) -> Any:

@@ -50,6 +50,8 @@ class ListingDetected:
     confidence: float = 0.0
     # True=KRW만 추가된 기존 업비트 코인(BTC/USDT 선상장), False=신규 전체상장, None=미상
     pre_listed: bool | None = None
+    # True=상장 시점 이미 빗썸(KRW)에 있던 코인, False=빗썸 미상장, None=미상
+    pre_listed_bithumb: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

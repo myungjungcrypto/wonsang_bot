@@ -35,6 +35,7 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
     rets_all: list[float] = []
     by_type: dict[str, list[float]] = {"KRW만추가(기존코인)": [], "신규전체상장": [], "미상": []}
     by_venue: dict[str, list[float]] = {"1개소": [], "2-3개소": [], "4+개소": []}
+    by_bithumb: dict[str, list[float]] = {"빗썸선상장": [], "빗썸미상장": [], "미상": []}
     grades: dict[str, int] = {}
 
     for c in cases:
@@ -46,6 +47,10 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
         pre = c.get("pre_listed")
         key = "KRW만추가(기존코인)" if pre is True else ("신규전체상장" if pre is False else "미상")
         by_type[key].append(r)
+
+        bit = c.get("pre_listed_bithumb")
+        bkey = "빗썸선상장" if bit is True else ("빗썸미상장" if bit is False else "미상")
+        by_bithumb[bkey].append(r)
 
         vc = (c.get("meta") or {}).get("venue_count")
         if isinstance(vc, int):
@@ -60,4 +65,5 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
         "grades": grades,
         "by_listing_type": {k: _stats(v) for k, v in by_type.items()},
         "by_venue_count": {k: _stats(v) for k, v in by_venue.items()},
+        "by_bithumb": {k: _stats(v) for k, v in by_bithumb.items()},
     }

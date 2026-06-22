@@ -22,6 +22,8 @@ from .returns import Series, _price_at, point_return_pct
 log = logging.getLogger(__name__)
 
 UPBIT_API = "https://api.upbit.com/v1"
+# 빗썸 v1 은 업비트 호환 API(같은 경로/필드) → 동일 백필러 재사용. (라이브 재검증 필요)
+BITHUMB_API = "https://api.bithumb.com/v1"
 
 
 def parse_krw_markets(payload: list) -> list[dict]:
@@ -59,11 +61,12 @@ def _fmt(ts: float) -> str:
 
 
 class UpbitMarketBackfiller:
-    def __init__(self, http: HttpClient) -> None:
+    def __init__(self, http: HttpClient, base_url: str = UPBIT_API) -> None:
         self.http = http
+        self.base = base_url.rstrip("/")  # 업비트 또는 빗썸(v1 호환)
 
     def fetch_krw_markets(self) -> list[dict]:
-        payload = self.http.get_json(f"{UPBIT_API}/market/all?isDetails=false")
+        payload = self.http.get_json(f"{self.base}/market/all?isDetails=false")
         return parse_krw_markets(payload if isinstance(payload, list) else [])
 
     def find_listing_day(self, market: str, max_pages: int = 40) -> Optional[float]:
@@ -71,7 +74,7 @@ class UpbitMarketBackfiller:
         to: Optional[str] = None
         oldest: Optional[str] = None
         for _ in range(max_pages):
-            url = f"{UPBIT_API}/candles/days?market={market}&count=200"
+            url = f"{self.base}/candles/days?market={market}&count=200"
             if to:
                 url += f"&to={quote(to)}"
             try:
@@ -102,7 +105,7 @@ class UpbitMarketBackfiller:
         to = day_start + 24 * 3600
         for _ in range(max_pages):
             url = (
-                f"{UPBIT_API}/candles/minutes/1?market={market}"
+                f"{self.base}/candles/minutes/1?market={market}"
                 f"&count=200&to={quote(_fmt(to))}"
             )
             try:
@@ -150,7 +153,7 @@ class UpbitMarketBackfiller:
     ) -> Optional[float]:
         """특정 시점(이상 첫 포인트) KRW 가격. KRW-USDT 환율 조회 등에 사용."""
         url = (
-            f"{UPBIT_API}/candles/minutes/1?market={market}"
+            f"{self.base}/candles/minutes/1?market={market}"
             f"&count=200&to={quote(_fmt(ts + pad_sec))}"
         )
         rows = self.http.get_json(url)

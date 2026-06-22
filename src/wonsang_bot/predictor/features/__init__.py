@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ...config import Config
 from .base import FeatureContext, FeatureExtractor, Provider
+from .bithumb_listed import BithumbListedFeature
 from .listing_type import ListingTypeFeature
 from .marketcap import MarketCapFeature
 from .narrative import NarrativeFeature
@@ -20,6 +21,7 @@ def build_extractors(config: Config) -> list[FeatureExtractor]:
         SupplyChokeFeature(config.w_supply),
         ListingTypeFeature(config.w_listing_type),
         VenueCountFeature(config.w_venue_count),
+        BithumbListedFeature(config.w_bithumb_listed),
         MarketCapFeature(config.w_marketcap),
         SocialFeature(config.w_social),
     ]
@@ -34,6 +36,7 @@ __all__ = [
     "SupplyChokeFeature",
     "ListingTypeFeature",
     "VenueCountFeature",
+    "BithumbListedFeature",
     "MarketCapFeature",
     "SocialFeature",
     "build_extractors",

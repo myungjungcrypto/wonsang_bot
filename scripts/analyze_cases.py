@@ -55,6 +55,13 @@ def main() -> None:
             print(f"  {k:8s} n={v['n']:3d}  중앙값 {v['median_ret']:+6.1f}%  "
                   f"실패율 {v['fail_rate']:.0%}  승률 {v['win_rate']:.0%}  "
                   f"(평균 {v['avg_ret']:+.0f}%)")
+
+    print("\n=== 빗썸 기상장 여부별 (가설 검증 — 데이터로 캘리브레이션) ===")
+    for k, v in s.get("by_bithumb", {}).items():
+        if v.get("n"):
+            print(f"  {k:10s} n={v['n']:3d}  중앙값 {v['median_ret']:+6.1f}%  "
+                  f"실패율 {v['fail_rate']:.0%}  승률 {v['win_rate']:.0%}  "
+                  f"(평균 {v['avg_ret']:+.0f}%)")
     print()
 
 
