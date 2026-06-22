@@ -46,7 +46,7 @@ class TelegramNotifier:
         return "\n".join(lines)
 
     _GRADE_EMOJI = {
-        "대성공": "🟢🟢", "성공": "🟢", "보통": "🟡", "실패": "🔴", "큰실패": "🔴🔴",
+        "대성공": "🟢🟢", "성공": "🟢", "약성공": "🟡", "실패": "🔴", "큰실패": "🔴🔴",
     }
 
     @classmethod

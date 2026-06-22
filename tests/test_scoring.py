@@ -31,7 +31,7 @@ class TestToGrade(unittest.TestCase):
         self.assertEqual(scoring.to_grade(0.95), "대성공")
         self.assertEqual(scoring.to_grade(0.80), "대성공")
         self.assertEqual(scoring.to_grade(0.79), "성공")
-        self.assertEqual(scoring.to_grade(0.50), "보통")
+        self.assertEqual(scoring.to_grade(0.50), "약성공")
         self.assertEqual(scoring.to_grade(0.30), "실패")
         self.assertEqual(scoring.to_grade(0.0), "큰실패")
 

@@ -19,7 +19,7 @@ class TestNearest(unittest.TestCase):
         self.store = HistoricalStore([
             Case("c1", "AAA", {"timing": 0.8, "narrative": 1.0}, "대성공"),
             Case("c2", "BBB", {"timing": 0.3, "narrative": 0.3}, "큰실패"),
-            Case("c3", "CCC", {"unrelated": 0.5}, "보통"),  # 공유키 없음 → 제외
+            Case("c3", "CCC", {"unrelated": 0.5}, "약성공"),  # 공유키 없음 → 제외
         ])
 
     def test_nearest_orders_by_distance(self):

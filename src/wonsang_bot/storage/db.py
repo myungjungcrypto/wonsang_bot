@@ -164,7 +164,7 @@ class Storage:
                 (
                     str(case.get("id", "")),
                     str(case.get("symbol", "")),
-                    str(case.get("grade", "보통")),
+                    str(case.get("grade", "약성공")),
                     json.dumps(case.get("features", {}), ensure_ascii=False),
                     json.dumps(case.get("meta", {}), ensure_ascii=False),
                 ),

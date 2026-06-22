@@ -11,8 +11,8 @@ from typing import Any
 
 from ..predictor.labeling import grade_from_return
 
-WIN_PCT = 10.0   # 성공 기준(성공+ 등급)
-FAIL_PCT = 0.0   # 실패 기준(이하 손실)
+WIN_PCT = 0.0    # 승리 기준: 0% 이상(약성공+성공+대성공)
+FAIL_PCT = 0.0   # 실패 기준: 0% 미만
 
 
 def _stats(rets: list[float]) -> dict[str, Any]:
@@ -23,8 +23,8 @@ def _stats(rets: list[float]) -> dict[str, Any]:
     fails = sum(1 for r in rets if r < FAIL_PCT)
     return {
         "n": n,
-        "win_rate": round(wins / n, 3),       # ret>=10%
-        "fail_rate": round(fails / n, 3),      # ret<0%
+        "win_rate": round(wins / n, 3),       # ret>=0% (승리)
+        "fail_rate": round(fails / n, 3),      # ret<0% (손실)
         "median_ret": round(statistics.median(rets), 2),  # 이상치에 강함(대표값)
         "avg_ret": round(sum(rets) / n, 2),    # 이상치(대박)에 휘둘림 — 참고용
         "max_ret": round(max(rets), 1),        # 최대 대박(이상치 확인용)

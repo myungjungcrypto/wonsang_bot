@@ -56,7 +56,7 @@ class ListingDetected:
 
 
 # 등급(낮음→높음). 인덱스가 클수록 좋은 따리.
-GRADES: tuple[str, ...] = ("큰실패", "실패", "보통", "성공", "대성공")
+GRADES: tuple[str, ...] = ("큰실패", "실패", "약성공", "성공", "대성공")
 
 
 @dataclass(slots=True)
@@ -76,7 +76,7 @@ class GradePredicted:
     source: str
     announcement_id: str
     symbols: list[str] = field(default_factory=list)
-    grade: str = "보통"
+    grade: str = "약성공"
     score: float = 0.0                # 가용 피처 가중합(0..1)
     confidence: float = 0.0           # 가용 피처 비중(0..1)
     features: list[FeatureScore] = field(default_factory=list)

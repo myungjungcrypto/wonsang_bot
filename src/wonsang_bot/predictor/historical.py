@@ -31,7 +31,7 @@ class Case:
             id=str(d.get("id", "")),
             symbol=str(d.get("symbol", "")),
             features=dict(d.get("features", {})),
-            grade=str(d.get("grade", "보통")),
+            grade=str(d.get("grade", "약성공")),
             meta=dict(d.get("meta", {})),
         )
 

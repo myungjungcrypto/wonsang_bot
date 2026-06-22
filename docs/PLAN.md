@@ -91,7 +91,7 @@
 - **난제:** 사전공지(컨트랙트 미포함), 멀티체인 토큰, 동명 티커, 저지연 경쟁(서브초 폴링·ETag/last-id diff·이중화·국내 IP).
 - **출력:** `ListingDetected(symbol, contracts[], chains[], market, ts, source, raw)`.
 
-### (2) predictor — 등급 예측 (대성공/성공/보통/실패/큰실패)
+### (2) predictor — 등급 예측 (대성공/성공/약성공/실패/큰실패)
 - **피처 추출기(`features/`):**
   - `marketcap` 유통 시총(MC) — CoinGecko/CMC + 온체인 유통량 계산.
   - `timing` 상장 시간대 점수 — 금요일 저녁/예상 밖 타이밍 가중.
@@ -213,7 +213,7 @@
 - **목적:** 망 허용 환경(서울 IP 권장)에서 과거 상장 데이터를 모아 백필 입력(cases JSON) 자동 생성.
 - 구성: `archive.py`(공지 아카이브 페이지네이션), `returns.py`(가격시계열→진입+고점 수익률, 순수), `price.py`(국내 KRW 캔들 수익률 + 코인게코 시총, 네트워크 / 캔들 파서는 순수), `assemble.py`(RawCase 조립, 순수). 실행: `scripts/collect_cases.py` → `scripts/backfill_cases.py`.
 - **실현수익률 라벨 방법론 (2026-06-20 확정):** 상장 **+5분 가격에 매수** → 상장 직후 **+15분 *시점* 가격에 매도(고점/윈도 max 아님)**. `point_return_pct`.
-  - 등급: **대성공 ≥25% / 성공 10~25% / 보통 0~10% / 실패 -10~0% / 큰실패 ≤-10%** (`labeling.py`).
+  - 등급: **대성공 ≥25% / 성공 10~25% / 약성공 0~10% / 실패 -10~0% / 큰실패 ≤-10%** (`labeling.py`).
   - 진입/매도 시점은 `COLLECT_ENTRY_MIN`/`COLLECT_EXIT_MIN`(분)로 조정.
   - **업비트 중심(중요도 90):** 업비트 분봉(`/v1/candles`, `to`로 과거 백필 OK)이 주 소스. 빗썸(10)은 공개 candlestick이 최근 구간만 → 과거 깊이 한계(추후 보강).
 

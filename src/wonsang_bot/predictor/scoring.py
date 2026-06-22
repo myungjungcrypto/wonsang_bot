@@ -12,7 +12,7 @@ from ..core.events import FeatureScore
 DEFAULT_THRESHOLDS: tuple[tuple[float, str], ...] = (
     (0.80, "대성공"),
     (0.62, "성공"),
-    (0.42, "보통"),
+    (0.42, "약성공"),
     (0.25, "실패"),
     (0.0, "큰실패"),
 )

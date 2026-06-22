@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from wonsang_bot.collector.analysis import summarize  # noqa: E402
+from wonsang_bot.core.events import GRADES  # noqa: E402
 
 
 def main() -> None:
@@ -36,8 +37,10 @@ def main() -> None:
     print(f"\n=== 전체 ({s['overall'].get('n', 0)}건) ===")
     print(f"  중앙값 {s['overall'].get('median_ret')}%  (평균 {s['overall'].get('avg_ret')}%, "
           f"최대 {s['overall'].get('max_ret')}%)  "
-          f"승률(≥10%) {s['overall'].get('win_rate')}  실패율(<0%) {s['overall'].get('fail_rate')}")
-    print(f"  등급분포: {s['grades']}")
+          f"승률(≥0%) {s['overall'].get('win_rate')}  실패율(<0%) {s['overall'].get('fail_rate')}")
+    g = s["grades"]
+    ordered = "  ".join(f"{name} {g.get(name, 0)}" for name in reversed(GRADES))
+    print(f"  등급분포(높은순): {ordered}")
 
     print("\n=== 상장 유형별 (중앙값 기준 — 평균은 대박에 휘둘림) ===")
     for k, v in s["by_listing_type"].items():
