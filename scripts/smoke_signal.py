@@ -7,11 +7,13 @@
 감지부(공지 폴링/프록시/파싱)는 타지 않음 — 그건 실제 상장으로 검증.
 
 사용:
-    python scripts/smoke_signal.py IRYS ethereum:0xdC035D45d973E3EC169d2276DDab16f1e407384F
-    python scripts/smoke_signal.py WIF      # 컨트랙트 없이(심볼만)도 가능
+    python scripts/smoke_signal.py IRYS ethereum:0x<주소>
+    python scripts/smoke_signal.py WIF                      # 컨트랙트 없이(심볼만)도 가능
+    python scripts/smoke_signal.py IRYS ethereum:0x<주소> net=ethereum  # 브릿지 테스트
+      → 최저가 매수처가 net(입금체인)과 다른 체인이면 🌉 브릿지 경로가 뜸
 환경:
     TELEGRAM_DRY_RUN=true 면 전송 대신 로그(안전). false + 토큰/챗ID 면 실제 전송.
-    COINGECKO_ENABLED=true(+키) 로 venue_count/시총 활성 권장.
+    COINGECKO_ENABLED=true(+키) 로 venue_count/시총 활성, LIFI_ENABLED=true 로 브릿지.
 """
 import asyncio
 import os
@@ -26,13 +28,18 @@ from wonsang_bot.logging_conf import setup_logging  # noqa: E402
 
 
 async def main() -> None:
-    args = sys.argv[1:]
-    symbol = args[0] if args else "IRYS"
     contracts = []
-    for a in args[1:]:
-        if ":" in a:
+    deposit_network = None
+    positional = []
+    for a in sys.argv[1:]:
+        if a.startswith("net="):
+            deposit_network = a.split("=", 1)[1] or None
+        elif ":" in a:
             ch, _, ad = a.partition(":")
             contracts.append(Contract(chain=ch, address=ad))
+        else:
+            positional.append(a)
+    symbol = positional[0] if positional else "IRYS"
 
     config = Config.load()
     setup_logging(config.log_level)
@@ -48,8 +55,10 @@ async def main() -> None:
         symbols=[symbol], markets=["KRW"], is_krw=True, contracts=contracts,
         confidence=0.99, pre_listed=False,
         pre_listed_bithumb=pre_b, pre_listed_binance=pre_n,
+        deposit_network=deposit_network,
     )
     print(f"▶ 합성 신호 발행: {symbol} (contracts={len(contracts)}, "
+          f"입금네트워크={deposit_network or '-'}, "
           f"빗썸선상장={pre_b}, 바이낸스선상장={pre_n})")
     dry = config.telegram_dry_run or not config.telegram_token or not config.telegram_chat_id
     print(f"  텔레그램: {'dry-run(로그만)' if dry else '실제 전송'} — 알림은 아래로\n")
