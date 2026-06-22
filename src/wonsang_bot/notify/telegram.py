@@ -60,6 +60,9 @@ class TelegramNotifier:
         ]
         if ev.secondary_grade:
             lines.append(f"과거 케이스 2차등급: {ev.secondary_grade}")
+        if ev.buy_venue and ev.buy_price is not None:
+            vc = f", {ev.venue_count}곳" if ev.venue_count else ""
+            lines.append(f"💰 매수처: {ev.buy_venue} ${ev.buy_price:,.6g}{vc}")
         lines.append("─ 근거 ─")
         for f in ev.features:
             mark = "" if f.available else " (데이터없음)"

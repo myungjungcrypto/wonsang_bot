@@ -86,6 +86,10 @@ class GradePredicted:
     features: list[FeatureScore] = field(default_factory=list)
     neighbors: list[dict[str, Any]] = field(default_factory=list)  # 유사 과거 케이스
     secondary_grade: str | None = None   # 과거 케이스 기반 2차 등급
+    # 구매처 추천(라이브 구매처 조회 시): 어디서 얼마에 살지
+    buy_venue: str | None = None         # 매수처(cex명 또는 dex:chain)
+    buy_price: float | None = None       # 최저가(USD)
+    venue_count: int | None = None       # 구매 가능 거래소 수
     predicted_at: str = field(default_factory=now_iso)
     notes: str = ""
 

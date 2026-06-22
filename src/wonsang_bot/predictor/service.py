@@ -29,6 +29,7 @@ class PredictorService:
         historical: Optional[HistoricalStore] = None,
         market_provider: Optional[Provider] = None,
         social_provider: Optional[Provider] = None,
+        venue_provider: Optional[Provider] = None,
     ) -> None:
         self.config = config
         self.storage = storage
@@ -37,6 +38,7 @@ class PredictorService:
         self.historical = historical
         self.market_provider = market_provider
         self.social_provider = social_provider
+        self.venue_provider = venue_provider   # 예측 시점 구매처 조회(venue_count·추천)
         bus.subscribe(ListingDetected, self.on_listing)
 
     async def on_listing(self, ev: ListingDetected) -> None:
@@ -48,12 +50,16 @@ class PredictorService:
         await self.bus.publish(pred)
 
     def predict(self, ev: ListingDetected, now: datetime | None = None) -> GradePredicted:
+        # 예측 시점 구매처 조회 → venue_count 활성 + 구매처 추천(라이브 연결 시)
+        buy = self.venue_provider(ev) if self.venue_provider else None
+        extra = dict(buy) if buy else {}
         ctx = FeatureContext(
             listing=ev,
             config=self.config,
             now=now,
             market_provider=self.market_provider,
             social_provider=self.social_provider,
+            extra=extra,
         )
         features = [ex.extract(ctx) for ex in self.extractors]
         score, confidence = scoring.combine(features)
@@ -80,6 +86,9 @@ class PredictorService:
             features=features,
             neighbors=neighbors_out,
             secondary_grade=secondary,
+            buy_venue=(buy or {}).get("buy_venue"),
+            buy_price=(buy or {}).get("buy_price"),
+            venue_count=(buy or {}).get("venue_count"),
         )
         log.info(
             "등급 예측: %s %s → %s (score=%.3f conf=%.2f, 2차=%s)",

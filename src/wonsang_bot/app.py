@@ -7,8 +7,10 @@ import logging
 from .config import Config
 from .core.bus import EventBus
 from .core.events import GradePredicted, ListingDetected
+from .collector.buyrouting import make_venue_provider
 from .collector.coingecko import CoinGeckoTokens, make_market_provider
-from .collector.exchanges import binance_pre_listed
+from .collector.dex import GeckoTerminalDEX
+from .collector.exchanges import binance_pre_listed, build_overseas_aggregator
 from .collector.lunarcrush import LunarCrushClient, make_social_provider
 from .detector.service import DetectorService
 from .detector.sources.bithumb import BithumbSource, bithumb_pre_listed
@@ -46,14 +48,30 @@ def build_service(config: Config) -> DetectorService:
 
     if config.predictor_enabled:
         historical = HistoricalStore.from_dicts(storage.load_cases())
-        # 시총 provider: CoinGecko(키 있으면 데모/프로 헤더 자동). 미연결이면 marketcap 비활성.
+        # CoinGecko(시총·신원·DEX 인증). 키 있으면 한 클라이언트로 묶어 페이싱(쿼터 공유).
         market_provider = None
+        cg_tokens = None
+        cg_http = None
         if config.coingecko_enabled:
             cg_http = HttpClient(
                 timeout=config.http_timeout_sec, proxy=None,
                 user_agent=config.request_user_agent, min_interval=2.0, max_retries=2,
             )
-            market_provider = make_market_provider(CoinGeckoTokens(config, cg_http))
+            cg_tokens = CoinGeckoTokens(config, cg_http)
+            market_provider = make_market_provider(cg_tokens)
+        # 구매처 조회 provider(venue_count 활성 + 매수처 추천) — CEX 집계 + DEX
+        overseas = build_overseas_aggregator(config)
+        if config.coingecko_enabled and config.coingecko_api_key and cg_http is not None:
+            onchain_base = config.coingecko_base_url.rstrip("/") + "/onchain"
+            dex_headers = ({"x-cg-pro-api-key": config.coingecko_api_key}
+                           if "pro-api.coingecko.com" in onchain_base
+                           else {"x-cg-demo-api-key": config.coingecko_api_key})
+            dex = GeckoTerminalDEX(cg_http, base=onchain_base, headers=dex_headers)
+        else:
+            dex = GeckoTerminalDEX(HttpClient(
+                timeout=config.http_timeout_sec, proxy=None,
+                user_agent=config.request_user_agent, min_interval=4.0, max_retries=2))
+        venue_provider = make_venue_provider(overseas, dex, cg_tokens)
         # 소셜 provider: LunarCrush(키 있을 때만). 미연결이면 social 비활성.
         social_provider = None
         if config.lunarcrush_enabled and config.lunarcrush_api_key:
@@ -65,6 +83,7 @@ def build_service(config: Config) -> DetectorService:
         PredictorService(
             config, storage, bus, build_extractors(config), historical=historical,
             market_provider=market_provider, social_provider=social_provider,
+            venue_provider=venue_provider,
         )
         bus.subscribe(GradePredicted, notifier.on_grade)
         log.info("등급 예측: ON (과거 케이스 %d건, 시총=%s, 소셜=%s)",

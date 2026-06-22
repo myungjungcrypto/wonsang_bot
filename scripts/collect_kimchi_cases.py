@@ -35,11 +35,11 @@ from datetime import datetime, timezone  # noqa: E402
 from wonsang_bot.collector.archive import fetch_upbit_archive  # noqa: E402
 from wonsang_bot.collector.coingecko import CoinGeckoTokens  # noqa: E402
 from wonsang_bot.collector.dex import GeckoTerminalDEX  # noqa: E402
+from wonsang_bot.collector.buyrouting import gather_buy_route  # noqa: E402
 from wonsang_bot.collector.exchanges import (  # noqa: E402
     Quote,
     binance_pre_listed,
     build_overseas_aggregator,
-    choose_buy_venue,
 )
 from wonsang_bot.collector.kimchi import kimchi_return_pct  # noqa: E402
 from wonsang_bot.collector.upbit_market import (  # noqa: E402
@@ -187,47 +187,18 @@ def main() -> None:
                     log.info("스킵 %s: 업비트 KRW 마켓 없음(상장폐지/개명)", symbol)
                     continue
                 buy_ts = announce_ts + entry_offset
-                # --- 구매처 전부 탐색(CEX+DEX) → 유동성 컷 → 최저가 ---
-                # (1) 신원 확정: 공지 컨트랙트 중 상장심볼과 같은 토큰 → coin_id + 전체체인 주소.
-                #     본문엔 여러 토큰 주소가 섞일 수 있음(USDS 공지에 SKY 주소까지).
-                resolved = None
-                identified = False
-                if cg_tokens is not None:
-                    for c in contracts:
-                        r = cg_tokens.resolve(c.chain, c.address)
-                        if r.symbol:
-                            identified = True
-                            if r.symbol == symbol.lower():
-                                resolved = r
-                                break
-                # (2) CEX: 코인게코 티커로 '이 코인을 실제 상장한 거래소'만(충돌 토큰 배제).
-                #     티커는 resolve 응답에 같이 옴 → 별도 호출 없음.
-                if resolved is not None:
-                    venues = overseas.fetch_venues(symbol, buy_ts, only=resolved.exchanges)
-                    chain_addrs = dict(resolved.platforms)
-                elif cg_tokens is None:
-                    venues = overseas.fetch_venues(symbol, buy_ts)  # 심볼 신뢰(충돌위험)
-                    chain_addrs = ({contracts[0].chain: contracts[0].address}
-                                   if contracts else {})
-                elif identified:
-                    # 신원 확인됐는데 상장심볼과 불일치 → 다른 토큰 → 신뢰 불가(스킵 유도)
+                # 구매처 탐색(CEX+DEX) → 유동성 컷 → 최저가. 백필·라이브 공용 로직.
+                route = gather_buy_route(
+                    symbol, buy_ts, contracts,
+                    overseas=overseas, dex=dex, cg_tokens=cg_tokens,
+                    dex_min_liq=dex_min_liq,
+                )
+                if route.mismatch:
                     log.info("스킵 %s: 공지 컨트랙트가 상장심볼과 불일치(다른 토큰)", symbol)
-                    venues, chain_addrs = {}, {}
-                else:
-                    # 코인게코가 못 알아본 신규 토큰 → 첫 주소 DEX + 심볼 CEX best-effort
-                    venues = overseas.fetch_venues(symbol, buy_ts)
-                    chain_addrs = ({contracts[0].chain: contracts[0].address}
-                                   if contracts else {})
-                # (3) DEX: 같은 토큰의 전체 체인 풀(브릿지 가능=같은 토큰) → 체인별 구매처.
-                for ch, ad in chain_addrs.items():
-                    dq = dex.quote_at(ch, ad, buy_ts)
-                    if dq:
-                        venues[f"dex:{ch}"] = {"price": round(dq[0], 8),
-                                               "liq": round(dq[1], 2), "kind": "dex"}
-                # (4) 유동성 컷(DEX reserve>=min_liq) 통과분 중 최저가.
-                p, v, sp = choose_buy_venue(venues, dex_min_liq=dex_min_liq)
-                quote = Quote(buy_price=p, buy_venue=v, price_spread=sp, venues=venues)
-                used_dex = bool(v and v.startswith("dex"))
+                resolved_coin_id = route.coin_id
+                quote = Quote(buy_price=route.buy_price, buy_venue=route.buy_venue,
+                              price_spread=route.price_spread, venues=route.venues)
+                used_dex = route.used_dex
                 usd_buy = quote.buy_price  # 유동성 통과 구매처 중 최저가
                 if usd_buy is None:
                     log.info("스킵 %s: 매수 가능 구매처 없음(유동성 부족/TGE 동시상장 의심)",
@@ -272,8 +243,8 @@ def main() -> None:
 
             # 과거 시총: 신원확정(coin_id) 시 상장일 CoinGecko 시총(백필 marketcap 피처용)
             market_cap_usd = None
-            if cg_tokens is not None and resolved is not None and resolved.coin_id:
-                market_cap_usd = cg_tokens.market_cap_at(resolved.coin_id, announce_ts)
+            if cg_tokens is not None and resolved_coin_id:
+                market_cap_usd = cg_tokens.market_cap_at(resolved_coin_id, announce_ts)
 
             cases.append({
                 "id": f"upbit:{symbol}",
