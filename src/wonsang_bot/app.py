@@ -9,6 +9,7 @@ from .core.bus import EventBus
 from .core.events import GradePredicted, ListingDetected
 from .collector.coingecko import CoinGeckoTokens, make_market_provider
 from .collector.exchanges import binance_pre_listed
+from .collector.lunarcrush import LunarCrushClient, make_social_provider
 from .detector.service import DetectorService
 from .detector.sources.bithumb import BithumbSource, bithumb_pre_listed
 from .detector.sources.upbit import UpbitSource
@@ -53,13 +54,22 @@ def build_service(config: Config) -> DetectorService:
                 user_agent=config.request_user_agent, min_interval=2.0, max_retries=2,
             )
             market_provider = make_market_provider(CoinGeckoTokens(config, cg_http))
+        # 소셜 provider: LunarCrush(키 있을 때만). 미연결이면 social 비활성.
+        social_provider = None
+        if config.lunarcrush_enabled and config.lunarcrush_api_key:
+            lc_http = HttpClient(
+                timeout=config.http_timeout_sec, proxy=None,
+                user_agent=config.request_user_agent, min_interval=1.0, max_retries=2,
+            )
+            social_provider = make_social_provider(LunarCrushClient(config, lc_http))
         PredictorService(
             config, storage, bus, build_extractors(config), historical=historical,
-            market_provider=market_provider,
+            market_provider=market_provider, social_provider=social_provider,
         )
         bus.subscribe(GradePredicted, notifier.on_grade)
-        log.info("등급 예측: ON (과거 케이스 %d건, 시총=%s)",
-                 len(historical.cases), "ON" if market_provider else "OFF")
+        log.info("등급 예측: ON (과거 케이스 %d건, 시총=%s, 소셜=%s)",
+                 len(historical.cases), "ON" if market_provider else "OFF",
+                 "ON" if social_provider else "OFF")
 
     sources = []
     if config.upbit_enabled:

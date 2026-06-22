@@ -67,6 +67,7 @@ _UPBIT_URL = (
 )
 _BITHUMB_URL = "https://api.bithumb.com/v1/notices?count=20"
 _COINGECKO_URL = "https://api.coingecko.com/api/v3"
+_LUNARCRUSH_URL = "https://lunarcrush.com/api4"
 # 실제 브라우저 UA (api-manager.upbit.com 등 봇 차단 회피용)
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -104,6 +105,11 @@ class Config:
     coingecko_enabled: bool = False
     coingecko_api_key: str | None = None
     coingecko_base_url: str = "https://api.coingecko.com/api/v3"
+
+    # --- 소셜(LunarCrush, 선택형) ---
+    lunarcrush_enabled: bool = False
+    lunarcrush_api_key: str | None = None
+    lunarcrush_base_url: str = "https://lunarcrush.com/api4"
 
     # --- 등급 예측(Phase 2) ---
     predictor_enabled: bool = True
@@ -158,6 +164,9 @@ class Config:
             coingecko_enabled=_get_bool("COINGECKO_ENABLED", False),
             coingecko_api_key=_get("COINGECKO_API_KEY"),
             coingecko_base_url=_get("COINGECKO_BASE_URL", _COINGECKO_URL),  # type: ignore[arg-type]
+            lunarcrush_enabled=_get_bool("LUNARCRUSH_ENABLED", False),
+            lunarcrush_api_key=_get("LUNARCRUSH_API_KEY"),
+            lunarcrush_base_url=_get("LUNARCRUSH_BASE_URL", _LUNARCRUSH_URL),  # type: ignore[arg-type]
             predictor_enabled=_get_bool("PREDICTOR_ENABLED", True),
             w_timing=_get_float("W_TIMING", 1.0),
             w_narrative=_get_float("W_NARRATIVE", 1.5),
